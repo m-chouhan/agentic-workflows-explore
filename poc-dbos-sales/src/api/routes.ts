@@ -9,8 +9,7 @@ import { z } from "zod";
 import { getDb } from "../db/sqlite";
 
 const ANALYSIS_QUEUE_NAME  = process.env.ANALYSIS_QUEUE_NAME ?? "analysis-queue";
-const ANALYZE_YEAR_WORKFLOW = "analyzeYear";           // must match method name in worker
-const ANALYZE_YEAR_CLASS    = "SalesAnalysisWorkflow"; // must match class name in worker
+const ANALYZE_YEAR_WORKFLOW = "analyzeYear"; // must match name in DBOS.registerWorkflow({ name: "analyzeYear" })
 
 const AnalyzeRequestSchema = z.object({
   year: z.number().int().min(2000).max(2100),
@@ -36,8 +35,7 @@ export function buildRouter(client: DBOSClient): Router {
     try {
       console.log(`[server] → ENQUEUE  year=${year}  workflowId=${workflowId}`);
       await client.enqueue(
-        { queueName: ANALYSIS_QUEUE_NAME, workflowName: ANALYZE_YEAR_WORKFLOW,
-          workflowClassName: ANALYZE_YEAR_CLASS, workflowID: workflowId },
+        { queueName: ANALYSIS_QUEUE_NAME, workflowName: ANALYZE_YEAR_WORKFLOW, workflowID: workflowId },
         year,
       );
       console.log(`[server] ✓ enqueued  workflowId=${workflowId}`);

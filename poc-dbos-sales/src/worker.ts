@@ -3,16 +3,16 @@
 import * as dotenv from "dotenv";
 dotenv.config();
 
-import { DBOS, WorkflowQueue } from "@dbos-inc/dbos-sdk";
-import { SalesAnalysisWorkflow } from "./workflows/analyzeSales";
+import { DBOS } from "@dbos-inc/dbos-sdk";
 import { getDb } from "./db/sqlite";
 
+// Importing registers the workflow with DBOS (registerWorkflow runs at import time).
+import "./workflows/analyzeSales";
+
 export const ANALYSIS_QUEUE_NAME = "analysis-queue";
-export const analysisQueue = new WorkflowQueue(ANALYSIS_QUEUE_NAME);
 
 async function main(): Promise<void> {
-  getDb();          // bootstrap SQLite schema
-  void SalesAnalysisWorkflow; // ensure decorators register at import time
+  getDb(); // bootstrap SQLite schema
 
   const { PGHOST: host = "localhost", PGPORT: port = "5432",
           PGUSER: user = "dbos", PGPASSWORD: password = "dbos",
@@ -24,8 +24,10 @@ async function main(): Promise<void> {
   // correct crash-recovery scoping. Defaults to pid for local dev.
   const executorId = process.env.DBOS_EXECUTOR_ID ?? `worker-${process.pid}`;
 
-  DBOS.setConfig({ databaseUrl, runAdminServer: false });
+  DBOS.setConfig({ systemDatabaseUrl: databaseUrl, runAdminServer: false });
   await DBOS.launch();
+
+  await DBOS.registerQueue(ANALYSIS_QUEUE_NAME);
 
   console.log(`[worker] launched  pid=${process.pid}  executorId=${executorId}  queue="${ANALYSIS_QUEUE_NAME}"`);
 

@@ -16,7 +16,7 @@ async function main(): Promise<void> {
 
   const databaseUrl = `postgresql://${user}:${password}@${host}:${port}/${database}?connect_timeout=10&sslmode=disable`;
 
-  const client = await DBOSClient.create(databaseUrl);
+  const client = await DBOSClient.create({ systemDatabaseUrl: databaseUrl });
   console.log("[server] DBOSClient connected");
 
   const app = express();

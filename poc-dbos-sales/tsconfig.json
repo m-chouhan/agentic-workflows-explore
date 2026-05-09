@@ -11,8 +11,6 @@
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
     "declaration": true,
-    "experimentalDecorators": true,
-    "emitDecoratorMetadata": true,
     "sourceMap": true
   },
   "include": ["src/**/*", "scripts/**/*"],

@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "dbos-typescript": {
+      "source": "dbos-inc/agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/dbos-typescript/SKILL.md",
+      "computedHash": "0ea184b3ade54eedfd7109e041ec44803b12f7abc89116d9fab21a47ef40f295"
+    }
+  }
+}
