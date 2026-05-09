@@ -1,0 +1,21 @@
+# DBOS configuration — PoC #1
+# Connection string is read from PGCONNSTR env var (see .env.example).
+name: poc-dbos-sales
+
+language: node
+
+runtimeConfig:
+  start:
+    - "node dist/index.js"
+
+database:
+  hostname: ${PGHOST:-localhost}
+  port: ${PGPORT:-5432}
+  username: ${PGUSER:-dbos}
+  password: ${PGPASSWORD:-dbos}
+  app_db_name: ${PGDATABASE:-dbos_sales}
+  ssl: false
+
+telemetry:
+  logs:
+    logLevel: info
