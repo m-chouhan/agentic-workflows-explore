@@ -16,7 +16,6 @@ export function getDb(): Database.Database {
   _db.pragma("journal_mode = WAL");
   _db.pragma("foreign_keys = ON");
 
-  // Bootstrap schema (idempotent).
   const schemaPath = path.join(__dirname, "schema.sql");
   const schema = fs.readFileSync(schemaPath, "utf8");
   _db.exec(schema);

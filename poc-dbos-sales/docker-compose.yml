@@ -1,4 +1,5 @@
 services:
+  # ── Postgres — DBOS system database (workflow state + step checkpoints) ──────
   postgres:
     image: postgres:16
     container_name: poc-dbos-postgres
@@ -17,5 +18,56 @@ services:
       timeout: 5s
       retries: 10
 
+  # ── Worker — DBOS executor (owns all workflow + step definitions) ─────────────
+  # Polls Postgres queue "analysis-queue" and executes workflows.
+  # Has NO HTTP server — purely a background worker.
+  # Scale horizontally: docker compose up --scale worker=3
+  worker:
+    build: .
+    command: npx tsx src/worker.ts
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PGHOST: postgres
+      PGPORT: 5432
+      PGUSER: dbos
+      PGPASSWORD: dbos
+      PGDATABASE: dbos_sales
+      SQLITE_PATH: /data/sales.db
+      # Unique per replica — in K8s use Downward API (metadata.name)
+      DBOS_EXECUTOR_ID: worker-1
+    volumes:
+      - sales_sqlite:/data
+    profiles:
+      - full  # only starts with: docker compose --profile full up
+
+  # ── App Server — Express + DBOSClient (HTTP trigger, NO workflow code) ────────
+  # Enqueues work by string name only. Knows nothing about workflow implementations.
+  app-server:
+    build: .
+    command: npx tsx src/server.ts
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "3000:3000"
+    environment:
+      PORT: 3000
+      PGHOST: postgres
+      PGPORT: 5432
+      PGUSER: dbos
+      PGPASSWORD: dbos
+      PGDATABASE: dbos_sales
+      SQLITE_PATH: /data/sales.db
+      ANALYSIS_QUEUE_NAME: analysis-queue
+    volumes:
+      - sales_sqlite:/data
+    profiles:
+      - full  # only starts with: docker compose --profile full up
+
 volumes:
   dbos_pg_data:
+  sales_sqlite:

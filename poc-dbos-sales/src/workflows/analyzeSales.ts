@@ -1,15 +1,5 @@
-/**
- * DBOS workflow: analyse a year of sales data and persist insights.
- *
- * Step boundaries:
- *   1. readSalesData       — pulls rows for the requested year from SQLite
- *   2. aggregateSales      — pure JS reducer (totals, byProduct, byRegion, byMonth)
- *   3. runAnalysisAgent    — calls the mock analysis agent (swap for real LLM later)
- *   4. writeInsights       — writes one row to sales_insights in SQLite
- *
- * Each step is a `@DBOS.step` so DBOS persists its output in Postgres.
- * If the process crashes mid-workflow, DBOS replays from the last completed step.
- */
+// DBOS workflow: read sales → aggregate → analyse → write insights.
+// Each @DBOS.step output is checkpointed in Postgres for crash-safe replay.
 import { DBOS } from "@dbos-inc/dbos-sdk";
 import { getDb } from "../db/sqlite";
 import {
@@ -21,10 +11,8 @@ import {
 interface SalesRow {
   order_date: string;
   product: string;
-  category: string;
   region: string;
   units: number;
-  unit_price: number;
   revenue: number;
 }
 
@@ -36,25 +24,20 @@ export interface AnalyzeWorkflowResult {
 }
 
 export class SalesAnalysisWorkflow {
-  // --- Step 1: read raw sales rows for the given year ---------------------
   @DBOS.step()
   static async readSalesData(year: number): Promise<SalesRow[]> {
-    const db = getDb();
-    const start = `${year}-01-01`;
-    const end = `${year + 1}-01-01`;
-    const rows = db
+    const rows = getDb()
       .prepare(
-        `SELECT order_date, product, category, region, units, unit_price, revenue
+        `SELECT order_date, product, region, units, revenue
          FROM sales
          WHERE order_date >= ? AND order_date < ?
          ORDER BY order_date ASC`,
       )
-      .all(start, end) as SalesRow[];
-    DBOS.logger.info(`readSalesData: ${rows.length} rows for ${year}`);
+      .all(`${year}-01-01`, `${year + 1}-01-01`) as SalesRow[];
+    DBOS.logger.info(`[worker]   step1/readSalesData: ${rows.length} rows for ${year}`);
     return rows;
   }
 
-  // --- Step 2: aggregate the rows into the agent's input shape ------------
   @DBOS.step()
   static async aggregateSales(
     year: number,
@@ -101,22 +84,19 @@ export class SalesAnalysisWorkflow {
         .sort((a, b) => a.month.localeCompare(b.month)),
     };
 
-    DBOS.logger.info(
-      `aggregateSales: total=$${aggregated.totalRevenue}, products=${aggregated.byProduct.length}`,
-    );
+    DBOS.logger.info(`[worker]   step2/aggregateSales: total=$${aggregated.totalRevenue}, products=${aggregated.byProduct.length}`);
     return aggregated;
   }
 
-  // --- Step 3: ask the agent for an analysis ------------------------------
-  @DBOS.step()
+  // Retry config: handles transient LLM 5xx / rate-limit errors.
+  @DBOS.step({ retriesAllowed: true, maxAttempts: 4, intervalSeconds: 2, backoffRate: 2 })
   static async runAnalysisAgent(
     aggregated: AggregatedSales,
   ): Promise<AnalysisResult> {
-    DBOS.logger.info(`runAnalysisAgent: invoking mock agent for ${aggregated.year}`);
+    DBOS.logger.info(`[worker]   step3/runAnalysisAgent: invoking mock agent for ${aggregated.year}`);
     return await analyzeSales(aggregated);
   }
 
-  // --- Step 4: persist insights to SQLite ---------------------------------
   @DBOS.step()
   static async writeInsights(
     workflowId: string,
@@ -151,19 +131,35 @@ export class SalesAnalysisWorkflow {
       analysis.summary,
       JSON.stringify({ aggregated, analysis }),
     ) as { id: number };
-    DBOS.logger.info(`writeInsights: persisted insights id=${result.id}`);
+    DBOS.logger.info(`[worker]   step4/writeInsights: persisted insights id=${result.id}`);
     return result.id;
   }
 
-  // --- The durable workflow that ties the steps together ------------------
   @DBOS.workflow()
   static async analyzeYear(year: number): Promise<AnalyzeWorkflowResult> {
     const workflowId = DBOS.workflowID ?? `wf-${Date.now()}`;
-    DBOS.logger.info(`analyzeYear(${year}) starting; workflowId=${workflowId}`);
+    DBOS.logger.info(`[worker] ▶ WORKFLOW START  analyzeYear(${year})  workflowId=${workflowId}`);
 
-    const rows = await SalesAnalysisWorkflow.readSalesData(year);
+    const rows      = await SalesAnalysisWorkflow.readSalesData(year);
     const aggregated = await SalesAnalysisWorkflow.aggregateSales(year, rows);
-    const analysis = await SalesAnalysisWorkflow.runAnalysisAgent(aggregated);
+
+    // Agent failure fallback — workflow completes as SUCCESS with a degraded result
+    // instead of ERROR. In production: swap with human-in-the-loop signal or alert.
+    let analysis: AnalysisResult;
+    try {
+      analysis = await SalesAnalysisWorkflow.runAnalysisAgent(aggregated);
+    } catch (err) {
+      DBOS.logger.error(`runAnalysisAgent exhausted retries for ${year}: ${(err as Error).message}`);
+      analysis = {
+        summary:         `Analysis unavailable for ${year} — agent failed. Raw data captured.`,
+        topProduct:      aggregated.byProduct[0]?.product ?? "unknown",
+        topRegion:       aggregated.byRegion[0]?.region  ?? "unknown",
+        highlights:      [`Total revenue: $${aggregated.totalRevenue}`, `Total units: ${aggregated.totalUnits}`],
+        recommendations: ["Manual review required."],
+        riskFlags:       ["Agent failure: analysis could not be completed automatically."],
+      };
+    }
+
     const insightsId = await SalesAnalysisWorkflow.writeInsights(
       workflowId,
       year,
@@ -171,6 +167,7 @@ export class SalesAnalysisWorkflow {
       analysis,
     );
 
+    DBOS.logger.info(`[worker] ✓ WORKFLOW DONE  workflowId=${workflowId}  insightsId=${insightsId}  revenue=$${aggregated.totalRevenue}`);
     return { workflowId, year, insightsId, analysis };
   }
 }

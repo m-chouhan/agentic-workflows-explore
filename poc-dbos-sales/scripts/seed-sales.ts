@@ -40,7 +40,6 @@ function main(): void {
     for (const r of rows) insert.run(...r);
   });
 
-  // Generate sales for the last 365 days, ~5–25 orders/day.
   const today = new Date();
   const rows: unknown[][] = [];
   for (let dayOffset = 365; dayOffset >= 0; dayOffset--) {

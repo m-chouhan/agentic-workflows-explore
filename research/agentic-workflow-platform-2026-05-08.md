@@ -356,3 +356,59 @@ This is the IDP backbone you'll need for the "north star" — quick onboard, dep
 ## 11. Final Recommendation in One Paragraph
 
 Stand up **Temporal** on K8s as the primary durable orchestration backbone (best polyglot, best audit, best K8s story, proven for voice and trading), with a **parallel two-week DBOS PoC** to validate whether your team prefers the lighter Postgres-only model. Build narrow agents in **Pydantic-AI** (Python) and **LangGraph / Mastra** (TS), wire them as Temporal activities or DBOS steps. Use **LiveKit Agents** (or Pipecat with Pipecat Flows for the rules state machine) as the voice transport; keep the rules and side-effects in Temporal workflows behind it. Observe everything through **Langfuse** (self-hosted via Helm) plus **OpenTelemetry GenAI conventions**, fronted by **Grafana + Tempo + Prometheus**. Operationalise the platform via **ArgoCD + Temporal Worker Controller + per-tenant namespacing** — that is the path from your three use cases to the north-star self-serve platform.
+
+---
+
+## 12. PoC #1 Learnings — DBOS in Practice (2026-05-09)
+
+*Learnings from building and running the `poc-dbos-sales` PoC: Node.js / TypeScript, Express + DBOSClient (app server) + DBOS.launch() (worker), SQLite for business data, Postgres for DBOS state.*
+
+### 12.1 What worked well
+
+- **Queue-worker split is clean and natural.** App server (`DBOSClient.enqueue()`) and worker (`DBOS.launch()`) share zero code — only a Postgres system database. Adding a new worker type = new deployment, no restarts to existing services.
+- **`@DBOS.step()` retry config is excellent DX.** `{ retriesAllowed: true, maxAttempts: 4, intervalSeconds: 2, backoffRate: 2 }` on the decorator — clean, no try/catch retry logic inside the step. Retries were clearly visible in logs.
+- **Workflow-level fallback pattern works.** `try/catch` around the agent step + degraded result write means the workflow always completes as `SUCCESS` — callers always get a usable response even when the agent fails entirely.
+- **Application versioning is automatic.** DBOS computes a hash of workflow source code at startup — visible as `[version <hash>]` in logs. Every `tsx watch` file save triggers a new version. This is the foundation for blue-green deploys.
+- **`DBOSClient.getWorkflow(id)` is lightweight.** No runtime needed on the server side — just a Postgres read. Clean separation confirmed.
+- **`ON CONFLICT DO UPDATE` on the insights write** makes `writeInsights` naturally idempotent — safe to replay on crash without duplicate rows.
+
+### 12.2 Gotchas & surprises
+
+| Gotcha | Impact | Fix |
+|---|---|---|
+| `DBOSClient.create()` takes a URL string, not an object | Server crashed on startup | Pass `databaseUrl` string directly |
+| `DBOSClient.retrieveWorkflow()` requires full DBOS runtime | Server crashed on poll | Use `client.getWorkflow(id)` instead |
+| `Queue` is actually `WorkflowQueue` in v2 TS SDK | Import error | `import { WorkflowQueue }` |
+| `runAdminServer: false` required | Koa crash on Node 20 | Add to `DBOS.setConfig()` |
+| DBOS creates a SEPARATE system DB: `<appdb>_dbos_sys` | Confused about which DB to query | Connect to `dbos_sales_dbos_sys` for workflow state |
+| `@DBOS.step()` outputs only persisted for `@DBOS.transaction()` | `operation_outputs` table empty for pure async steps | Expected — step replay re-executes the function; use Postgres steps for true checkpointing |
+| `tsx watch` auto-reload changes `application_version` hash | New version = old PENDING workflows not auto-recovered by new version | Expected DBOS versioning behaviour — drain old version pods before removing them |
+| `DBOSClient` initialisation runs full DBOS migration check | `migration file failed` warning on every server start | Harmless (tables already exist) — suppress by pinning migration state |
+
+### 12.3 DBOS distributed model — confirmed findings
+
+- **Recovery is executor-scoped without Conductor.** Only the process that started a workflow (`executor_id = worker-<pid>`) recovers it on restart. In K8s, set `DBOS_EXECUTOR_ID` to pod name via Downward API.
+- **`FOR UPDATE SKIP LOCKED` is the coordination primitive.** No message broker. Multiple worker replicas poll the same queue; Postgres row locking ensures each job is processed exactly once.
+- **Workflow definitions live ONLY in the worker.** App server knows only: queue name (string), workflow class name (string), method name (string). Confirmed in practice.
+- **No hot-reload / dynamic registration.** Adding a new workflow type requires worker restart (rolling restart on K8s = zero downtime).
+- **`application_version` hash changes on ANY code change.** This is stricter than expected — even adding a log line creates a new version. Plan deployments accordingly.
+
+### 12.4 Revised DBOS assessment (vs research)
+
+| Dimension | Research prediction | Actual finding |
+|---|---|---|
+| Operational simplicity | ✅ Library + Postgres only | ✅ Confirmed — docker compose up + npm run dev:worker |
+| DX / learning curve | Moderate | Lower than expected — decorators feel natural in TS |
+| Step-level checkpointing | Postgres-backed | ⚠️ Only for `@DBOS.transaction()`, not plain `@DBOS.step()` |
+| Multi-process pickup | Queue-based ✅ | ✅ Confirmed — `WorkflowQueue` enables it |
+| Conductor for cross-pod recovery | Cloud-only ❌ | ❌ Confirmed — no self-hosted option |
+| Time-Travel Debugger | Unique feature | Not yet tested — next priority |
+| Throughput ceiling | Postgres-bound | Not load-tested yet |
+
+### 12.5 Next steps from PoC #1
+
+1. **Swap mock agent for real LLM** (OpenAI GPT-4o via Agents SDK) — validate retry/fallback under real 5xx conditions.
+2. **Add Langfuse tracing** around the agent step — wire OTel spans to see LLM latency + cost per workflow.
+3. **Test Time-Travel Debugger** (VS Code extension) — replay a production trace locally.
+4. **Build PoC #2 — Temporal** with the identical use case for apples-to-apples comparison.
+5. **Load test** — run 3 worker replicas, trigger 100 concurrent workflows, observe Postgres queue behaviour.
