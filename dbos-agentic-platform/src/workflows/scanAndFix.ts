@@ -1,71 +1,126 @@
 /**
  * DBOS Workflow: Scan → Policy → Triage → Persist
  *
- * Phase 1: Run scanners (deterministic — stub for now, real CLI later)
+ * Phase 1: Shallow-clone public repo, run npm audit (deterministic)
  * Phase 2: Policy evaluation (deterministic — CVSS threshold)
  * Phase 3: Triage (agentic — LLM prioritises findings with reasoning)
  * Phase 4: Persist results to Postgres
- *
- * Fix generation + PR creation will be added as separate phases once
- * scan-and-triage is proven end-to-end with real repos.
  */
 import { DBOS } from "@dbos-inc/dbos-sdk";
 import { query } from "../db/postgres";
 import { triageFindings } from "../agent/vulnTriageAgent";
 import type { ScanFinding, TriageResult, ScanAndFixResult } from "../schemas/vulnSchemas";
+import { exec } from "child_process";
+import { promisify } from "util";
+import * as fs from "fs";
+import * as path from "path";
 
-// ── Scan (deterministic) ─────────────────────────────────────────────────────
+const execAsync = promisify(exec);
+
+async function cloneRepo(repo: string, branch: string, workDir: string): Promise<void> {
+  const url = `https://github.com/${repo}.git`;
+  DBOS.logger.info(`[worker] cloneRepo: ${url} → ${workDir}`);
+  await execAsync(`git clone --depth 1 --branch ${branch} ${url} ${workDir}`, { timeout: 60_000 });
+}
+
+interface NpmAuditVuln {
+  severity: string;
+  range: string;
+  fixAvailable?: { name: string; version: string } | boolean;
+  via: Array<{ title?: string; url?: string; severity?: string; cwe?: string[] } | string>;
+}
+
+function mapNpmSeverity(sev: string): "critical" | "high" | "medium" | "low" | "info" {
+  switch (sev) {
+    case "critical": return "critical";
+    case "high":     return "high";
+    case "moderate": return "medium";
+    case "low":      return "low";
+    default:         return "info";
+  }
+}
+
+async function runNpmAudit(workDir: string): Promise<ScanFinding[]> {
+  DBOS.logger.info(`[worker] runNpmAudit: ${workDir}`);
+
+  let stdout: string;
+  try {
+    // npm audit exits non-zero when vulns found — that's expected
+    const result = await execAsync("npm audit --json 2>/dev/null", { cwd: workDir, timeout: 30_000 });
+    stdout = result.stdout;
+  } catch (err: any) {
+    // exit code 1 = vulns found, stdout still has valid JSON
+    if (err.stdout) {
+      stdout = err.stdout;
+    } else {
+      DBOS.logger.error(`[worker] npm audit failed: ${err.message}`);
+      return [];
+    }
+  }
+
+  let audit: { vulnerabilities?: Record<string, NpmAuditVuln> };
+  try {
+    audit = JSON.parse(stdout);
+  } catch {
+    DBOS.logger.error(`[worker] npm audit returned invalid JSON`);
+    return [];
+  }
+
+  const vulns = audit.vulnerabilities ?? {};
+  const findings: ScanFinding[] = [];
+
+  for (const [name, v] of Object.entries(vulns)) {
+    // v.via can be strings (transitive ref) or objects (actual advisory)
+    const advisory = v.via.find((x): x is Exclude<typeof x, string> => typeof x !== "string");
+
+    const fixVersion = typeof v.fixAvailable === "object" ? v.fixAvailable.version : undefined;
+    const cweId = advisory?.cwe?.[0];
+
+    findings.push({
+      id: advisory?.url ?? `npm-${name}`,
+      scanner: "npm-audit",
+      severity: mapNpmSeverity(v.severity),
+      packageName: name,
+      currentVersion: v.range,
+      fixedVersion: fixVersion,
+      cweId,
+      description: advisory?.title ?? `Vulnerability in ${name}`,
+    });
+  }
+
+  DBOS.logger.info(`[worker] runNpmAudit: found ${findings.length} vulnerabilities`);
+  return findings;
+}
 
 async function runScanners(repo: string, branch: string): Promise<ScanFinding[]> {
   DBOS.logger.info(`[worker] runScanners: ${repo}@${branch}`);
 
-  // TODO: Replace with real git clone + scanner CLI calls.
-  const findings: ScanFinding[] = [
-    {
-      id: "CVE-2026-31337",
-      scanner: "npm-audit",
-      severity: "high",
-      cvss: 8.1,
-      cweId: "CWE-1321",
-      packageName: "lodash",
-      currentVersion: "4.17.20",
-      fixedVersion: "4.17.21",
-      description: "Prototype Pollution in lodash via the set function",
-    },
-    {
-      id: "CVE-2026-22145",
-      scanner: "semgrep",
-      severity: "medium",
-      cvss: 5.3,
-      cweId: "CWE-79",
-      filePath: "src/api/handler.ts",
-      line: 42,
-      description: "Potential XSS: user input rendered without sanitisation in response body",
-    },
-    {
-      id: "CVE-2026-10099",
-      scanner: "trivy",
-      severity: "critical",
-      cvss: 9.8,
-      cweId: "CWE-502",
-      packageName: "yaml",
-      currentVersion: "2.3.1",
-      fixedVersion: "2.4.0",
-      description: "Unsafe YAML deserialization allows arbitrary code execution",
-    },
-  ];
+  const workDir = `/tmp/scan-${Date.now()}`;
+  try {
+    await cloneRepo(repo, branch, workDir);
 
-  DBOS.logger.info(`[worker] runScanners: found ${findings.length} findings`);
-  return findings;
+    const findings: ScanFinding[] = [];
+
+    // npm audit (if Node.js project)
+    if (fs.existsSync(path.join(workDir, "package-lock.json"))) {
+      findings.push(...await runNpmAudit(workDir));
+    } else {
+      DBOS.logger.info(`[worker] runScanners: no package-lock.json found, skipping npm audit`);
+    }
+
+    // TODO: Add trivy, semgrep here for broader coverage
+
+    DBOS.logger.info(`[worker] runScanners: ${findings.length} total findings`);
+    return findings;
+  } finally {
+    // Always cleanup
+    await execAsync(`rm -rf ${workDir}`).catch(() => {});
+  }
 }
-
-// ── Policy (deterministic) ───────────────────────────────────────────────────
 
 function countBlockers(findings: ScanFinding[]): number {
   return findings.filter((f) => f.severity === "critical" || (f.cvss ?? 0) >= 9.0).length;
 }
-
-// ── Persist (deterministic, idempotent) ──────────────────────────────────────
 
 async function writeScanResults(
   workflowId: string,
@@ -108,6 +163,7 @@ async function scanAndFix(repo: string, branch: string): Promise<ScanAndFixResul
 
   if (findings.length === 0) {
     await DBOS.runStep(() => writeScanResults(workflowId, repo, branch, [], 0, null, "completed"), { name: "persist-empty" });
+    DBOS.logger.info(`[worker] ✓ scanAndFix done — no findings`);
     return { workflowId, repo, branch, totalFindings: 0, blockerCount: 0, fixesAttempted: 0, fixesSucceeded: 0, prUrls: [], status: "completed" };
   }
 
@@ -120,7 +176,7 @@ async function scanAndFix(repo: string, branch: string): Promise<ScanAndFixResul
   try {
     triage = await DBOS.runStep(() => triageFindings(findings), {
       name: "triage",
-      retriesAllowed: true, maxAttempts: 3, intervalSeconds: 2, backoffRate: 2,
+      retriesAllowed: true, maxAttempts: 2, intervalSeconds: 5, backoffRate: 1,
     });
   } catch (err) {
     DBOS.logger.error(`triage failed: ${(err as Error).message}`);

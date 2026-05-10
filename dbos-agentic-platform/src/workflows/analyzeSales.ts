@@ -115,7 +115,7 @@ async function analyzeYear(year: number): Promise<AnalyzeWorkflowResult> {
   let analysis: AnalysisResult;
   try {
     analysis = await DBOS.runStep(() => runAnalysisAgent(aggregated), {
-      retriesAllowed: true, maxAttempts: 3, intervalSeconds: 2, backoffRate: 2,
+      retriesAllowed: true, maxAttempts: 2, intervalSeconds: 5, backoffRate: 1,
     });
   } catch (err) {
     DBOS.logger.error(`runAnalysisAgent exhausted retries for ${year}: ${(err as Error).message}`);

@@ -5,18 +5,14 @@ dotenv.config();
 
 import { DBOS } from "@dbos-inc/dbos-sdk";
 import { ensureSchema } from "./db/postgres";
-import { ANALYSIS_QUEUE_NAME, VULN_QUEUE_NAME } from "./config";
+import { getDatabaseUrl, ANALYSIS_QUEUE_NAME, VULN_QUEUE_NAME } from "./config";
 
 // Importing registers workflows with DBOS (registerWorkflow runs at import time).
 import "./workflows/analyzeSales";
 import "./workflows/scanAndFix";
 
 async function bootstrapDbOs(): Promise<void> {
-  const { PGHOST: host = "localhost", PGPORT: port = "5432",
-    PGUSER: user = "dbos", PGPASSWORD: password = "dbos",
-    PGDATABASE: database = "dbos_sales" } = process.env;
-
-  const databaseUrl = `postgresql://${user}:${password}@${host}:${port}/${database}?connect_timeout=10&sslmode=disable`;
+  const databaseUrl = getDatabaseUrl();
   const executorId = process.env.DBOS_EXECUTOR_ID ?? `worker-${process.pid}`;
 
   DBOS.setConfig({ systemDatabaseUrl: databaseUrl, runAdminServer: false, executorID: executorId });

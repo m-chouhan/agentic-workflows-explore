@@ -6,23 +6,14 @@
 import { Pool } from "pg";
 import * as fs from "fs";
 import * as path from "path";
-import { DB_POOL_MAX } from "../config";
+import { getDatabaseUrl, getPoolMax } from "../config";
 
 let _pool: Pool | undefined;
 let _schemaApplied = false;
 
-function buildConnectionString(): string {
-  const host = process.env.PGHOST ?? "localhost";
-  const port = process.env.PGPORT ?? "5432";
-  const user = process.env.PGUSER ?? "dbos";
-  const password = process.env.PGPASSWORD ?? "dbos";
-  const database = process.env.PGDATABASE ?? "dbos_sales";
-  return `postgresql://${user}:${password}@${host}:${port}/${database}?connect_timeout=10&sslmode=disable`;
-}
-
 export function getPool(): Pool {
   if (_pool) return _pool;
-  _pool = new Pool({ connectionString: buildConnectionString(), max: DB_POOL_MAX });
+  _pool = new Pool({ connectionString: getDatabaseUrl(), max: getPoolMax() });
   return _pool;
 }
 

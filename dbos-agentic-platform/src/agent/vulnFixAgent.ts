@@ -5,7 +5,7 @@
 import { generateText, Output } from "ai";
 import { google } from "@ai-sdk/google";
 import { DBOS } from "@dbos-inc/dbos-sdk";
-import { DEFAULT_MODEL } from "../config";
+import { getModel } from "../config";
 import {
   ScanFinding,
   FixCandidateSchema,
@@ -76,7 +76,7 @@ export async function generateFix(ctx: FixContext): Promise<FixCandidate> {
   DBOS.logger.info(`[fix-agent] → ${ctx.finding.id} | ${prompt.length} chars`);
 
   const { experimental_output: object, usage } = await (generateText as any)({
-    model: google(DEFAULT_MODEL as any),
+    model: google(getModel() as any),
     output: (Output.object as any)({ schema: FixCandidateSchema }),
     prompt,
   });

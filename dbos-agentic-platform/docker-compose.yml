@@ -6,7 +6,7 @@ services:
     environment:
       POSTGRES_USER: dbos
       POSTGRES_PASSWORD: dbos
-      POSTGRES_DB: dbos_sales
+      POSTGRES_DB: dbos_platform
     ports:
       - "5432:5432"
     volumes:
@@ -31,7 +31,7 @@ services:
       PGPORT: 5432
       PGUSER: dbos
       PGPASSWORD: dbos
-      PGDATABASE: dbos_sales
+      PGDATABASE: dbos_platform
       DBOS_EXECUTOR_ID: worker-1
       GOOGLE_GENERATIVE_AI_API_KEY: ${GOOGLE_GENERATIVE_AI_API_KEY:-}
       GOOGLE_MODEL: ${GOOGLE_MODEL:-gemini-flash-latest}
@@ -54,7 +54,7 @@ services:
       PGPORT: 5432
       PGUSER: dbos
       PGPASSWORD: dbos
-      PGDATABASE: dbos_sales
+      PGDATABASE: dbos_platform
     networks:
       - dbos-net
 

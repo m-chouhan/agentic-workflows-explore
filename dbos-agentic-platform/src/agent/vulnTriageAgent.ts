@@ -5,7 +5,7 @@
 import { generateText, Output } from "ai";
 import { google } from "@ai-sdk/google";
 import { DBOS } from "@dbos-inc/dbos-sdk";
-import { DEFAULT_MODEL } from "../config";
+import { getModel } from "../config";
 import { ScanFinding, TriageResultSchema, TriageResult } from "../schemas/vulnSchemas";
 
 export async function triageFindings(findings: ScanFinding[]): Promise<TriageResult> {
@@ -34,7 +34,7 @@ export async function triageFindings(findings: ScanFinding[]): Promise<TriageRes
   DBOS.logger.info(`[triage-agent] → ${findings.length} findings | ${prompt.length} chars`);
 
   const { experimental_output: object, usage } = await (generateText as any)({
-    model: google(DEFAULT_MODEL as any),
+    model: google(getModel() as any),
     output: (Output.object as any)({ schema: TriageResultSchema }),
     prompt,
   });

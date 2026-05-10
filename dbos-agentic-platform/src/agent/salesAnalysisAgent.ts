@@ -6,7 +6,7 @@ import { generateText, Output } from "ai";
 import { google } from "@ai-sdk/google";
 import { z } from "zod";
 import { DBOS } from "@dbos-inc/dbos-sdk";
-import { DEFAULT_MODEL } from "../config";
+import { getModel } from "../config";
 
 export const AggregatedSalesSchema = z.object({
   year:         z.number().int(),
@@ -41,10 +41,10 @@ export async function analyzeSales(data: AggregatedSales): Promise<AnalysisResul
     JSON.stringify(data, null, 2),
   ].join("\n");
 
-  DBOS.logger.info(`[sales-agent] → ${prompt.length} chars | model=${DEFAULT_MODEL}`);
+  DBOS.logger.info(`[sales-agent] → ${prompt.length} chars | model=${getModel()}`);
 
   const { experimental_output: object, usage } = await (generateText as any)({
-    model: google(DEFAULT_MODEL as any),
+    model: google(getModel() as any),
     output: (Output.object as any)({ schema: AnalysisResultSchema }),
     prompt,
   });

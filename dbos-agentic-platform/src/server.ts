@@ -5,17 +5,14 @@ dotenv.config();
 import express from "express";
 import { DBOSClient } from "@dbos-inc/dbos-sdk";
 import { ensureSchema } from "./db/postgres";
+import { getDatabaseUrl } from "./config";
 import { buildSalesRouter } from "./api/salesRoutes";
 import { buildVulnRouter } from "./api/vulnRoutes";
 
 const PORT = parseInt(process.env.PORT ?? "3000", 10);
 
 async function main(): Promise<void> {
-  const { PGHOST: host = "localhost", PGPORT: port = "5432",
-          PGUSER: user = "dbos", PGPASSWORD: password = "dbos",
-          PGDATABASE: database = "dbos_sales" } = process.env;
-
-  const databaseUrl = `postgresql://${user}:${password}@${host}:${port}/${database}?connect_timeout=10&sslmode=disable`;
+  const databaseUrl = getDatabaseUrl();
 
   await ensureSchema();
 
