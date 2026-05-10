@@ -4,32 +4,33 @@ import * as dotenv from "dotenv";
 dotenv.config();
 
 import { DBOS } from "@dbos-inc/dbos-sdk";
-import { getDb } from "./db/sqlite";
+import { bootstrapAndGetDb } from "./db/sqlite";
 
 // Importing registers the workflow with DBOS (registerWorkflow runs at import time).
 import "./workflows/analyzeSales";
 
 export const ANALYSIS_QUEUE_NAME = "analysis-queue";
 
-async function main(): Promise<void> {
-  getDb(); // bootstrap SQLite schema
-
+async function bootstrapDbOs(): Promise<void> {
   const { PGHOST: host = "localhost", PGPORT: port = "5432",
-          PGUSER: user = "dbos", PGPASSWORD: password = "dbos",
-          PGDATABASE: database = "dbos_sales" } = process.env;
+    PGUSER: user = "dbos", PGPASSWORD: password = "dbos",
+    PGDATABASE: database = "dbos_sales" } = process.env;
 
   const databaseUrl = `postgresql://${user}:${password}@${host}:${port}/${database}?connect_timeout=10&sslmode=disable`;
 
-  // DBOS_EXECUTOR_ID: set to pod name in K8s (Downward API: metadata.name) for
-  // correct crash-recovery scoping. Defaults to pid for local dev.
   const executorId = process.env.DBOS_EXECUTOR_ID ?? `worker-${process.pid}`;
 
-  DBOS.setConfig({ systemDatabaseUrl: databaseUrl, runAdminServer: false });
+  DBOS.setConfig({ systemDatabaseUrl: databaseUrl, runAdminServer: false, executorID: executorId });
   await DBOS.launch();
 
   await DBOS.registerQueue(ANALYSIS_QUEUE_NAME);
 
   DBOS.logger.info(`[worker] launched  pid=${process.pid}  executorId=${executorId}  queue="${ANALYSIS_QUEUE_NAME}"`);
+}
+
+async function main(): Promise<void> {
+  bootstrapAndGetDb();
+  await bootstrapDbOs(); 
 
   const shutdown = async () => { await DBOS.shutdown(); process.exit(0); };
   process.on("SIGTERM", shutdown);

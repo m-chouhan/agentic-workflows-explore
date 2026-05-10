@@ -6,7 +6,7 @@
 import { Router, Request, Response } from "express";
 import { DBOSClient } from "@dbos-inc/dbos-sdk";
 import { z } from "zod";
-import { getDb } from "../db/sqlite";
+import { bootstrapAndGetDb } from "../db/sqlite"; 
 
 const ANALYSIS_QUEUE_NAME  = process.env.ANALYSIS_QUEUE_NAME ?? "analysis-queue";
 const ANALYZE_YEAR_WORKFLOW = "analyzeYear"; // must match name in DBOS.registerWorkflow({ name: "analyzeYear" })
@@ -69,7 +69,7 @@ export function buildRouter(client: DBOSClient): Router {
     const year = Number.parseInt(req.params.year, 10);
     if (Number.isNaN(year)) { res.status(400).json({ error: "invalid_year" }); return; }
 
-    const row = getDb()
+    const row = bootstrapAndGetDb()
       .prepare(
         `SELECT id, workflow_id, year, generated_at, total_revenue, total_units,
                 top_product, top_region, summary, insights_json

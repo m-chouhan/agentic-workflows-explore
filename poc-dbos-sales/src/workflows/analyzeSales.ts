@@ -1,6 +1,6 @@
 // DBOS workflow: read sales → aggregate → analyse → write insights.
 import { DBOS } from "@dbos-inc/dbos-sdk";
-import { getDb } from "../db/sqlite";
+import { bootstrapAndGetDb } from "../db/sqlite";
 import { analyzeSales, AggregatedSales, AnalysisResult } from "../agent/mockAgent";
 
 interface SalesRow {
@@ -20,7 +20,7 @@ export interface AnalyzeWorkflowResult {
 
 async function readSalesData(year: number): Promise<SalesRow[]> {
   await new Promise((r) => setTimeout(r, 2000));
-  const rows = getDb()
+  const rows = bootstrapAndGetDb()
     .prepare(
       `SELECT order_date, product, region, units, revenue
        FROM sales
@@ -82,7 +82,7 @@ async function writeInsights(
   aggregated: AggregatedSales,
   analysis: AnalysisResult,
 ): Promise<number> {
-  const result = getDb()
+  const result = bootstrapAndGetDb()
     .prepare(
       `INSERT INTO sales_insights
          (workflow_id, year, generated_at, total_revenue, total_units,

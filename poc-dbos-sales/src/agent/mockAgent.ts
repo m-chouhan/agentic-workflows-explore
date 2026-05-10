@@ -38,14 +38,13 @@ export async function analyzeSales(data: AggregatedSales): Promise<AnalysisResul
 
   DBOS.logger.info(`[agent] → ${prompt.length} chars | model=${process.env.GOOGLE_MODEL ?? "gemini-flash-latest"}`);
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { experimental_output: object, usage } = await (generateText as any)({
     model: google((process.env.GOOGLE_MODEL ?? "gemini-flash-latest") as any),
     output: (Output.object as any)({ schema: AnalysisResultSchema }),
     prompt,
   });
 
-  DBOS.logger.info(`[agent] ← tokens in=${usage.promptTokens} out=${usage.completionTokens} | top=${(object as AnalysisResult).topProduct}`);
+  DBOS.logger.info(`[agent] ← tokens in=${usage.inputTokens} out=${usage.outputTokens} | top=${(object as AnalysisResult).topProduct}`);
 
   return object as AnalysisResult;
 }

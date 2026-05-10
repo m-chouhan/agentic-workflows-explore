@@ -2,7 +2,7 @@
  * Seeds ~1 year of fake sales data into SQLite.
  * Usage: npm run seed
  */
-import { getDb, closeDb } from "../src/db/sqlite";
+import { bootstrapAndGetDb, closeDb } from "../src/db/sqlite";
 
 const PRODUCTS = [
   { product: "Atlas Widget",  category: "Widgets",     basePrice: 19.99 },
@@ -23,7 +23,7 @@ function isoDate(d: Date): string {
 }
 
 function main(): void {
-  const db = getDb();
+  const db = bootstrapAndGetDb();
 
   const existing = db.prepare("SELECT COUNT(*) AS n FROM sales").get() as { n: number };
   if (existing.n > 0) {

@@ -6,7 +6,7 @@ const SQLITE_PATH = process.env.SQLITE_PATH ?? "./data/sales.db";
 
 let _db: Database.Database | undefined;
 
-export function getDb(): Database.Database {
+export function bootstrapAndGetDb(): Database.Database {
   if (_db) return _db;
 
   const dir = path.dirname(SQLITE_PATH);
