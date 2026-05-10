@@ -1,33 +1,25 @@
 /**
- * DBOS Workflow: Scan → Triage → Fix → PR
+ * DBOS Workflow: Scan → Policy → Triage → Persist
  *
- * Deterministic steps: scanners, CVE enrichment, policy check, DB writes, GitHub API
- * Agentic steps: triage (LLM), fix generation (LLM)
+ * Phase 1: Run scanners (deterministic — stub for now, real CLI later)
+ * Phase 2: Policy evaluation (deterministic — CVSS threshold)
+ * Phase 3: Triage (agentic — LLM prioritises findings with reasoning)
+ * Phase 4: Persist results to Postgres
  *
- * This workflow demonstrates the hybrid pattern: deterministic skeleton + agentic brain.
+ * Fix generation + PR creation will be added as separate phases once
+ * scan-and-triage is proven end-to-end with real repos.
  */
 import { DBOS } from "@dbos-inc/dbos-sdk";
 import { query } from "../db/postgres";
 import { triageFindings } from "../agent/vulnTriageAgent";
-import { generateFix, FixContext } from "../agent/vulnFixAgent";
-import { createFixPR, pollChecks, CheckConclusion } from "../github/prCreator";
-import type {
-  ScanFinding,
-  TriageResult,
-  FixCandidate,
-  ScanAndFixResult,
-  PRDescription,
-} from "../schemas/vulnSchemas";
+import type { ScanFinding, TriageResult, ScanAndFixResult } from "../schemas/vulnSchemas";
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// Step 1: Run scanners (deterministic — wraps CLI tools)
-// ═══════════════════════════════════════════════════════════════════════════════
+// ── Scan (deterministic) ─────────────────────────────────────────────────────
 
 async function runScanners(repo: string, branch: string): Promise<ScanFinding[]> {
-  DBOS.logger.info(`[worker] runScanners: scanning ${repo}@${branch}`);
+  DBOS.logger.info(`[worker] runScanners: ${repo}@${branch}`);
 
-  // TODO: Replace with real scanner CLI calls (trivy, semgrep, npm audit).
-  // For now, return stub findings to prove the workflow shape.
+  // TODO: Replace with real git clone + scanner CLI calls.
   const findings: ScanFinding[] = [
     {
       id: "CVE-2026-31337",
@@ -67,19 +59,13 @@ async function runScanners(repo: string, branch: string): Promise<ScanFinding[]>
   return findings;
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// Step 2: Policy evaluation (deterministic — plain if/else)
-// ═══════════════════════════════════════════════════════════════════════════════
+// ── Policy (deterministic) ───────────────────────────────────────────────────
 
-function evaluatePolicy(findings: ScanFinding[]): { blockers: ScanFinding[]; nonBlockers: ScanFinding[] } {
-  const blockers = findings.filter((f) => f.severity === "critical" || (f.cvss ?? 0) >= 9.0);
-  const nonBlockers = findings.filter((f) => f.severity !== "critical" && (f.cvss ?? 0) < 9.0);
-  return { blockers, nonBlockers };
+function countBlockers(findings: ScanFinding[]): number {
+  return findings.filter((f) => f.severity === "critical" || (f.cvss ?? 0) >= 9.0).length;
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// Step 3: Write scan results to DB (deterministic — idempotent upsert)
-// ═══════════════════════════════════════════════════════════════════════════════
+// ── Persist (deterministic, idempotent) ──────────────────────────────────────
 
 async function writeScanResults(
   workflowId: string,
@@ -109,226 +95,64 @@ async function writeScanResults(
       status,
     ],
   );
-  DBOS.logger.info(`[worker]   writeScanResults: persisted ${findings.length} findings, status=${status}`);
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// Step 4: Write fix attempt to DB (deterministic)
-// ═══════════════════════════════════════════════════════════════════════════════
-
-async function writeFixAttempt(
-  workflowId: string,
-  fix: FixCandidate,
-  prUrl: string | null,
-  prStatus: string,
-): Promise<void> {
-  await query(
-    `INSERT INTO fix_attempts
-       (workflow_id, finding_id, fix_type, confidence, patch_json, pr_url, pr_status, created_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-    [
-      workflowId, fix.findingId, fix.fixType, fix.confidence,
-      JSON.stringify(fix), prUrl, prStatus, new Date().toISOString(),
-    ],
-  );
-  DBOS.logger.info(`[worker]   writeFixAttempt: ${fix.findingId} → ${prStatus}`);
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// Step 5: Generate PR description (deterministic — template-based)
-// ═══════════════════════════════════════════════════════════════════════════════
-
-function buildPRDescription(finding: ScanFinding, fix: FixCandidate): PRDescription {
-  const title = `[SECURITY] Fix ${finding.id}${finding.packageName ? ` in ${finding.packageName}` : ""}`;
-  const body = [
-    `## Security Fix`,
-    ``,
-    `**Vulnerability**: ${finding.id} (CVSS ${finding.cvss ?? "N/A"} — ${finding.severity.toUpperCase()})`,
-    finding.cweId ? `**CWE**: ${finding.cweId}` : "",
-    finding.packageName ? `**Package**: ${finding.packageName}@${finding.currentVersion ?? "?"}` : "",
-    finding.fixedVersion ? `**Fixed Version**: ${finding.fixedVersion}` : "",
-    ``,
-    `### Description`,
-    finding.description,
-    ``,
-    `### Fix Applied`,
-    fix.explanation,
-    ``,
-    `### Confidence`,
-    `Agent confidence: **${(fix.confidence * 100).toFixed(0)}%**`,
-    fix.breakingChange ? `⚠️ **This fix may introduce breaking changes**` : "",
-    ``,
-    `---`,
-    `*This PR was generated automatically by the vulnerability fix agent.*`,
-  ].filter(Boolean).join("\n");
-
-  return { title, body, labels: ["security", "automated"] };
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// Main workflow: scanAndFix
-// ═══════════════════════════════════════════════════════════════════════════════
+// ── Main workflow ────────────────────────────────────────────────────────────
 
 async function scanAndFix(repo: string, branch: string): Promise<ScanAndFixResult> {
   const workflowId = DBOS.workflowID ?? `scan-${Date.now()}`;
-  DBOS.logger.info(`[worker] ▶ WORKFLOW START  scanAndFix(${repo}@${branch})  workflowId=${workflowId}`);
+  DBOS.logger.info(`[worker] ▶ scanAndFix(${repo}@${branch})  wfId=${workflowId}`);
 
-  // ── Phase 1: Scan (deterministic) ──────────────────────────────────────────
-  const findings = await DBOS.runStep(() => runScanners(repo, branch), { name: "runScanners" });
+  // Phase 1: Scan
+  const findings = await DBOS.runStep(() => runScanners(repo, branch), { name: "scan" });
 
   if (findings.length === 0) {
-    await DBOS.runStep(
-      () => writeScanResults(workflowId, repo, branch, [], 0, null, "completed"),
-      { name: "writeScanResults-empty" },
-    );
-    DBOS.logger.info(`[worker] ✓ WORKFLOW DONE  no findings  workflowId=${workflowId}`);
-    return {
-      workflowId, repo, branch,
-      totalFindings: 0, blockerCount: 0,
-      fixesAttempted: 0, fixesSucceeded: 0,
-      prUrls: [], status: "completed",
-    };
+    await DBOS.runStep(() => writeScanResults(workflowId, repo, branch, [], 0, null, "completed"), { name: "persist-empty" });
+    return { workflowId, repo, branch, totalFindings: 0, blockerCount: 0, fixesAttempted: 0, fixesSucceeded: 0, prUrls: [], status: "completed" };
   }
 
-  // ── Phase 2: Policy evaluation (deterministic — plain if/else) ─────────────
-  const { blockers } = evaluatePolicy(findings);
-  DBOS.logger.info(`[worker]   policy: ${blockers.length} blockers out of ${findings.length} findings`);
+  // Phase 2: Policy
+  const blockerCount = countBlockers(findings);
+  DBOS.logger.info(`[worker] policy: ${blockerCount} blockers / ${findings.length} total`);
 
-  // ── Phase 3: Triage (agentic — LLM with retry) ────────────────────────────
+  // Phase 3: Triage (agentic)
   let triage: TriageResult;
   try {
     triage = await DBOS.runStep(() => triageFindings(findings), {
-      name: "triageFindings",
+      name: "triage",
       retriesAllowed: true, maxAttempts: 3, intervalSeconds: 2, backoffRate: 2,
     });
   } catch (err) {
-    DBOS.logger.error(`triageFindings failed: ${(err as Error).message}`);
+    DBOS.logger.error(`triage failed: ${(err as Error).message}`);
     triage = {
       prioritizedFindings: findings.map((f) => ({
         findingId: f.id,
         adjustedSeverity: f.severity === "info" ? "low" : f.severity,
-        reasoning: "Triage agent unavailable — using scanner severity as-is.",
+        reasoning: "Triage agent unavailable — using scanner severity.",
         exploitability: "likely" as const,
         fixType: f.fixedVersion ? "version-bump" as const : "code-change" as const,
       })),
-      executiveSummary: `Triage unavailable. ${findings.length} raw findings, ${blockers.length} blockers.`,
-      blockerCount: blockers.length,
-      recommendedAction: blockers.length > 0 ? "block-deploy" : "warn-and-proceed",
+      executiveSummary: `Triage failed. ${findings.length} raw findings, ${blockerCount} blockers.`,
+      blockerCount,
+      recommendedAction: blockerCount > 0 ? "block-deploy" : "warn-and-proceed",
     };
   }
 
-  // Persist scan + triage results
-  await DBOS.runStep(
-    () => writeScanResults(workflowId, repo, branch, findings, triage.blockerCount, triage, "triaged"),
-    { name: "writeScanResults-triaged" },
-  );
-
-  // ── Phase 4: Fix generation (agentic, per finding) ─────────────────────────
-  const fixableFindings = triage.prioritizedFindings.filter(
-    (f) => f.adjustedSeverity !== "false-positive" && f.fixType !== "accept-risk",
-  );
-
-  const fixes: Array<{ fix: FixCandidate; finding: ScanFinding }> = [];
-
-  for (const triaged of fixableFindings) {
-    const finding = findings.find((f) => f.id === triaged.findingId);
-    if (!finding) continue;
-
-    try {
-      const ctx: FixContext = { finding, triage: triaged };
-      const fix = await DBOS.runStep(() => generateFix(ctx), {
-        name: `generateFix-${triaged.findingId}`,
-        retriesAllowed: true, maxAttempts: 3, intervalSeconds: 2, backoffRate: 2,
-      });
-      fixes.push({ fix, finding });
-    } catch (err) {
-      DBOS.logger.error(`generateFix failed for ${triaged.findingId}: ${(err as Error).message}`);
-      await DBOS.runStep(
-        () => writeFixAttempt(workflowId, {
-          findingId: triaged.findingId,
-          fixType: triaged.fixType === "code-change" ? "code-patch" as const : triaged.fixType as "version-bump" | "config-change",
-          confidence: 0,
-          explanation: `Fix generation failed: ${(err as Error).message}`,
-          changes: [],
-          breakingChange: false,
-        }, null, "failed"),
-        { name: `writeFixAttempt-failed-${triaged.findingId}` },
-      );
-    }
-  }
-
-  // ── Phase 5: PR creation (deterministic — GitHub API) ──────────────────────
-  const prUrls: string[] = [];
-
-  for (const { fix, finding } of fixes) {
-    try {
-      const prDesc = buildPRDescription(finding, fix);
-
-      if (!process.env.GITHUB_TOKEN) {
-        DBOS.logger.info(`[worker]   SKIP PR creation (no GITHUB_TOKEN) for ${fix.findingId}`);
-        await DBOS.runStep(
-          () => writeFixAttempt(workflowId, fix, null, "skipped-no-token"),
-          { name: `writeFixAttempt-skip-${fix.findingId}` },
-        );
-        continue;
-      }
-
-      const prResult = await DBOS.runStep(
-        () => createFixPR(repo, branch, fix, prDesc),
-        { name: `createPR-${fix.findingId}` },
-      );
-
-      prUrls.push(prResult.prUrl);
-
-      const ciResult: CheckConclusion = await DBOS.runStep(
-        () => pollChecks(repo, prResult.headSha, 5 * 60 * 1000),
-        { name: `pollChecks-${fix.findingId}` },
-      );
-
-      await DBOS.runStep(
-        () => writeFixAttempt(workflowId, fix, prResult.prUrl, ciResult === "success" ? "ci-passed" : `ci-${ciResult}`),
-        { name: `writeFixAttempt-${fix.findingId}` },
-      );
-    } catch (err) {
-      DBOS.logger.error(`PR creation failed for ${fix.findingId}: ${(err as Error).message}`);
-      await DBOS.runStep(
-        () => writeFixAttempt(workflowId, fix, null, "pr-failed"),
-        { name: `writeFixAttempt-prfail-${fix.findingId}` },
-      );
-    }
-  }
-
-  // ── Phase 6: Final status ──────────────────────────────────────────────────
-  const fixesSucceeded = fixes.length;
-  const status = fixes.length === 0 && fixableFindings.length > 0
-    ? "failed"
-    : fixableFindings.length === 0
-      ? "completed"
-      : fixes.length < fixableFindings.length
-        ? "partial"
-        : "completed";
-
-  await DBOS.runStep(
-    () => writeScanResults(workflowId, repo, branch, findings, triage.blockerCount, triage, status),
-    { name: "writeScanResults-final" },
-  );
+  // Phase 4: Persist
+  await DBOS.runStep(() => writeScanResults(workflowId, repo, branch, findings, triage.blockerCount, triage, "completed"), { name: "persist" });
 
   const result: ScanAndFixResult = {
     workflowId, repo, branch,
     totalFindings: findings.length,
     blockerCount: triage.blockerCount,
-    fixesAttempted: fixableFindings.length,
-    fixesSucceeded,
-    prUrls,
+    fixesAttempted: 0,
+    fixesSucceeded: 0,
+    prUrls: [],
     triage,
-    status,
+    status: "completed",
   };
 
-  DBOS.logger.info(
-    `[worker] ✓ WORKFLOW DONE  workflowId=${workflowId}  findings=${findings.length} ` +
-    `fixes=${fixesSucceeded}/${fixableFindings.length}  PRs=${prUrls.length}  status=${status}`,
-  );
-
+  DBOS.logger.info(`[worker] ✓ scanAndFix done  wfId=${workflowId}  findings=${findings.length}  blockers=${triage.blockerCount}`);
   return result;
 }
 
