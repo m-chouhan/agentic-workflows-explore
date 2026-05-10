@@ -4,12 +4,14 @@ import * as dotenv from "dotenv";
 dotenv.config();
 
 import { DBOS } from "@dbos-inc/dbos-sdk";
-import { bootstrapAndGetDb } from "./db/sqlite";
+import { ensureSchema } from "./db/postgres";
 
-// Importing registers the workflow with DBOS (registerWorkflow runs at import time).
+// Importing registers workflows with DBOS (registerWorkflow runs at import time).
 import "./workflows/analyzeSales";
+import "./workflows/scanAndFix";
 
 export const ANALYSIS_QUEUE_NAME = "analysis-queue";
+export const VULN_QUEUE_NAME = process.env.VULN_QUEUE_NAME ?? "vuln-queue";
 
 async function bootstrapDbOs(): Promise<void> {
   const { PGHOST: host = "localhost", PGPORT: port = "5432",
@@ -24,13 +26,14 @@ async function bootstrapDbOs(): Promise<void> {
   await DBOS.launch();
 
   await DBOS.registerQueue(ANALYSIS_QUEUE_NAME);
+  await DBOS.registerQueue(VULN_QUEUE_NAME);
 
-  DBOS.logger.info(`[worker] launched  pid=${process.pid}  executorId=${executorId}  queue="${ANALYSIS_QUEUE_NAME}"`);
+  DBOS.logger.info(`[worker] launched  pid=${process.pid}  executorId=${executorId}  queues="${ANALYSIS_QUEUE_NAME}","${VULN_QUEUE_NAME}"`);
 }
 
 async function main(): Promise<void> {
-  bootstrapAndGetDb();
-  await bootstrapDbOs(); 
+  await ensureSchema();
+  await bootstrapDbOs();
 
   const shutdown = async () => { await DBOS.shutdown(); process.exit(0); };
   process.on("SIGTERM", shutdown);

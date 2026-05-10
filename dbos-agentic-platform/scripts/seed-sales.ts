@@ -1,8 +1,11 @@
 /**
- * Seeds ~1 year of fake sales data into SQLite.
+ * Seeds ~1 year of fake sales data into Postgres.
  * Usage: npm run seed
  */
-import { bootstrapAndGetDb, closeDb } from "../src/db/sqlite";
+import * as dotenv from "dotenv";
+dotenv.config();
+
+import { ensureSchema, query, closePool } from "../src/db/postgres";
 
 const PRODUCTS = [
   { product: "Atlas Widget",  category: "Widgets",     basePrice: 19.99 },
@@ -22,45 +25,51 @@ function isoDate(d: Date): string {
   return d.toISOString().slice(0, 10);
 }
 
-function main(): void {
-  const db = bootstrapAndGetDb();
+async function main(): Promise<void> {
+  await ensureSchema();
 
-  const existing = db.prepare("SELECT COUNT(*) AS n FROM sales").get() as { n: number };
-  if (existing.n > 0) {
-    console.log(`sales table already has ${existing.n} rows; truncating and reseeding.`);
-    db.exec("DELETE FROM sales");
+  const existing = await query<{ n: string }>("SELECT COUNT(*) AS n FROM sales");
+  const count = Number(existing[0].n);
+  if (count > 0) {
+    console.log(`sales table already has ${count} rows; truncating and reseeding.`);
+    await query("DELETE FROM sales");
   }
 
-  const insert = db.prepare(
-    `INSERT INTO sales (order_date, product, category, region, units, unit_price, revenue)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
-  );
-
-  const insertMany = db.transaction((rows: unknown[][]) => {
-    for (const r of rows) insert.run(...r);
-  });
-
   const today = new Date();
-  const rows: unknown[][] = [];
+  let totalRows = 0;
+
+  // Insert in daily batches to keep individual queries reasonable
   for (let dayOffset = 365; dayOffset >= 0; dayOffset--) {
     const d = new Date(today);
     d.setDate(d.getDate() - dayOffset);
     const ordersToday = randInt(5, 25);
+
+    const values: string[] = [];
+    const params: unknown[] = [];
+    let paramIdx = 1;
+
     for (let i = 0; i < ordersToday; i++) {
       const p = PRODUCTS[randInt(0, PRODUCTS.length - 1)];
       const region = REGIONS[randInt(0, REGIONS.length - 1)];
       const units = randInt(1, 12);
-      // Add a little price jitter for realism.
       const unitPrice = +(p.basePrice * (0.9 + Math.random() * 0.2)).toFixed(2);
       const revenue = +(units * unitPrice).toFixed(2);
-      rows.push([isoDate(d), p.product, p.category, region, units, unitPrice, revenue]);
+
+      values.push(`($${paramIdx}, $${paramIdx+1}, $${paramIdx+2}, $${paramIdx+3}, $${paramIdx+4}, $${paramIdx+5}, $${paramIdx+6})`);
+      params.push(isoDate(d), p.product, p.category, region, units, unitPrice, revenue);
+      paramIdx += 7;
     }
+
+    await query(
+      `INSERT INTO sales (order_date, product, category, region, units, unit_price, revenue)
+       VALUES ${values.join(", ")}`,
+      params,
+    );
+    totalRows += ordersToday;
   }
 
-  insertMany(rows);
-  console.log(`Seeded ${rows.length} sales rows across ~366 days.`);
-
-  closeDb();
+  console.log(`Seeded ${totalRows} sales rows across ~366 days.`);
+  await closePool();
 }
 
-main();
+main().catch((err) => { console.error("seed failed:", err); process.exit(1); });

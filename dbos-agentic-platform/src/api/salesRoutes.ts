@@ -1,12 +1,12 @@
 // Routes — enqueue/poll workflows via DBOSClient; no workflow code imported.
 // POST /api/analyze  { year } → enqueue analyzeYear → workflowId
 // GET  /api/analyze/:id       → poll status / result
-// GET  /api/insights/:year    → latest stored insight from SQLite
+// GET  /api/insights/:year    → latest stored insight from Postgres
 // GET  /healthz               → liveness
 import { Router, Request, Response } from "express";
 import { DBOSClient } from "@dbos-inc/dbos-sdk";
 import { z } from "zod";
-import { bootstrapAndGetDb } from "../db/sqlite"; 
+import { queryOne } from "../db/postgres";
 
 const ANALYSIS_QUEUE_NAME  = process.env.ANALYSIS_QUEUE_NAME ?? "analysis-queue";
 const ANALYZE_YEAR_WORKFLOW = "analyzeYear"; // must match name in DBOS.registerWorkflow({ name: "analyzeYear" })
@@ -15,7 +15,7 @@ const AnalyzeRequestSchema = z.object({
   year: z.number().int().min(2000).max(2100),
 });
 
-export function buildRouter(client: DBOSClient): Router {
+export function buildSalesRouter(client: DBOSClient): Router {
   const router = Router();
 
   router.get("/healthz", (_req: Request, res: Response) => {
@@ -65,17 +65,16 @@ export function buildRouter(client: DBOSClient): Router {
     }
   });
 
-  router.get("/api/insights/:year", (req: Request, res: Response) => {
+  router.get("/api/insights/:year", async (req: Request, res: Response) => {
     const year = Number.parseInt(req.params.year, 10);
     if (Number.isNaN(year)) { res.status(400).json({ error: "invalid_year" }); return; }
 
-    const row = bootstrapAndGetDb()
-      .prepare(
-        `SELECT id, workflow_id, year, generated_at, total_revenue, total_units,
-                top_product, top_region, summary, insights_json
-         FROM sales_insights WHERE year = ? ORDER BY generated_at DESC LIMIT 1`,
-      )
-      .get(year) as Record<string, unknown> | undefined;
+    const row = await queryOne<Record<string, unknown>>(
+      `SELECT id, workflow_id, year, generated_at, total_revenue, total_units,
+              top_product, top_region, summary, insights_json
+       FROM sales_insights WHERE year = $1 ORDER BY generated_at DESC LIMIT 1`,
+      [year],
+    );
 
     if (!row) { res.status(404).json({ error: "no_insights_for_year", year }); return; }
 

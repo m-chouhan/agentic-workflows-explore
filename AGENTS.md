@@ -61,7 +61,7 @@ Tech stack: Node.js / TypeScript, Express, DBOS SDK v4, Vercel AI SDK, SQLite (b
 - Cloning reference repos (e.g. `dbos-demo-apps`) inside the workspace creates an embedded git repo warning. Best practice: add to `.gitignore` with `echo "dbos-demo-apps/" >> .gitignore` and `git rm --cached dbos-demo-apps` if already staged.
 
 ### DBOS TypeScript Skill (Official Reference Docs)
-- A full DBOS skill lives at `poc-dbos-sales/.agents/skills/dbos-typescript/` — 32 reference files across 9 categories.
+- A full DBOS skill lives at `dbos-agentic-platform/.agents/skills/dbos-typescript/` — 32 reference files across 9 categories.
 - Before writing any DBOS code, check the relevant reference: `references/lifecycle-config.md`, `references/workflow-determinism.md`, `references/queue-basics.md`, `references/client-setup.md` etc.
 - This skill would have prevented most DBOS debugging iterations (config shape, registerQueue order, step naming rules).
 - Read `AGENTS.md` inside the skill folder first for the full index.

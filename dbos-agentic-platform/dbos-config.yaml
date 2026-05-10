@@ -1,6 +1,6 @@
 # DBOS configuration — PoC #1
 # Connection string is read from PGCONNSTR env var (see .env.example).
-name: poc-dbos-sales
+name: dbos-agentic-platform
 
 language: node
 

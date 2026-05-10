@@ -2,7 +2,7 @@ services:
   # ── Postgres — DBOS system database (workflow state + step checkpoints) ──────
   postgres:
     image: postgres:16
-    container_name: poc-dbos-postgres
+    container_name: dbos-agentic-postgres
     restart: unless-stopped
     environment:
       POSTGRES_USER: dbos
@@ -35,11 +35,9 @@ services:
       PGUSER: dbos
       PGPASSWORD: dbos
       PGDATABASE: dbos_sales
-      SQLITE_PATH: /data/sales.db
+      VULN_QUEUE_NAME: vuln-queue
       # Unique per replica — in K8s use Downward API (metadata.name)
       DBOS_EXECUTOR_ID: worker-1
-    volumes:
-      - sales_sqlite:/data
     profiles:
       - full  # only starts with: docker compose --profile full up
 
@@ -61,13 +59,10 @@ services:
       PGUSER: dbos
       PGPASSWORD: dbos
       PGDATABASE: dbos_sales
-      SQLITE_PATH: /data/sales.db
       ANALYSIS_QUEUE_NAME: analysis-queue
-    volumes:
-      - sales_sqlite:/data
+      VULN_QUEUE_NAME: vuln-queue
     profiles:
       - full  # only starts with: docker compose --profile full up
 
 volumes:
   dbos_pg_data:
-  sales_sqlite:

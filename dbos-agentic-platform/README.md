@@ -65,7 +65,7 @@ GET  /api/insights/:year  → read latest stored insight from SQLite
 ## Quick start
 
 ```bash
-cd poc-dbos-sales
+cd dbos-agentic-platform
 
 # 1. Install deps
 npm install
@@ -130,7 +130,7 @@ ORDER BY workflow_uuid, function_id;
 ## Layout
 
 ```
-poc-dbos-sales/
+dbos-agentic-platform/
 ├── docker-compose.yml          # Postgres + (optional) worker + app-server services
 ├── package.json                # dev:worker / dev:server scripts
 ├── scripts/

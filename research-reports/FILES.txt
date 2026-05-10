@@ -1,0 +1,289 @@
+VULNERABILITY FIX PIPELINE ARCHITECTURE RESEARCH
+Generated: May 10, 2026
+
+═══════════════════════════════════════════════════════════════════════════════
+QUICK START
+═══════════════════════════════════════════════════════════════════════════════
+
+📍 START HERE:
+   research-reports/VULNERABILITY_FIX_PIPELINE_SUMMARY.md
+   
+   This 8.4 KB document answers all 12 of your research questions in a 
+   quick-reference format. Read time: 5–10 minutes.
+
+📍 THEN DIVE DEEP:
+   research/vulnerability-fix-pipeline-architecture-2026-05-10.md
+   
+   This 47 KB, 1,326-line comprehensive technical architecture with:
+   - ASCII workflow diagrams
+   - 18 TypeScript code examples
+   - Decision matrices and trade-offs
+   - 14 major sections + appendix
+   
+   Read time: 45–60 minutes (or skim by topic)
+
+═══════════════════════════════════════════════════════════════════════════════
+FILE STRUCTURE
+═══════════════════════════════════════════════════════════════════════════════
+
+research-reports/
+├── README.md
+│   └─ Navigation guide, research methodology, how to use by role
+│
+├── VULNERABILITY_FIX_PIPELINE_SUMMARY.md ⭐ START
+│   ├─ Q1–Q12 answered (1–2 paragraphs each)
+│   ├─ Architecture decision table (8 key choices)
+│   ├─ Implementation roadmap (4 phases)
+│   ├─ Key metrics & success factors
+│   └─ Related research files
+│
+└── FILES.txt (this file)
+    └─ File listing & quick reference
+
+research/
+└── vulnerability-fix-pipeline-architecture-2026-05-10.md 📘 DEEP DIVE
+    ├─ Executive summary
+    ├─ §1: Ideal workflow (ASCII diagram + 8 decision gates)
+    ├─ §2: Deterministic vs agentic classification
+    ├─ §3: Human-in-the-loop gates (with DBOS.recv() code)
+    ├─ §4: Fix validation (3-layer approach)
+    ├─ §5: Rollback patterns & triggers
+    ├─ §6: Existing platforms (Snyk, Mend, GitHub Advanced Security)
+    ├─ §7: Parallel vs sequential fixes (trade-offs)
+    ├─ §8: Transitive dependency resolution (algorithms)
+    ├─ §9: State persistence (DBOS + database schema with ERD)
+    ├─ §10: DBOS v4 specific mappings (18 TypeScript examples)
+    ├─ §11: Security guardrails (prompt injection, supply chain)
+    ├─ §12: Open-source reference implementations
+    ├─ §13: Architectural decision summary
+    ├─ §14: Implementation phases (MVP → Optimization)
+    ├─ Appendix: Workflow step reference table
+    └─ References: 20+ sources (Atlassian, DBOS, security reports)
+
+═══════════════════════════════════════════════════════════════════════════════
+YOUR 12 RESEARCH QUESTIONS — QUICK ANSWERS
+═══════════════════════════════════════════════════════════════════════════════
+
+1. Ideal workflow architecture?
+   → Scan → Dependency Analysis → Parallel Fix Gen → Validate → PR → Gate → Merge
+   Location: Summary Q1, Report §1
+
+2. Deterministic vs agentic steps?
+   → Deterministic: scanning, triage, PRs; Agentic: LLM fix gen (with retry)
+   Location: Summary Q2, Report §2
+
+3. Human-in-the-loop gates?
+   → Auto for LOW+non-breaking; Human for MEDIUM+/low-confidence/breaking
+   → DBOS.recv() with 72h timeout → escalate
+   Location: Summary Q3, Report §3
+
+4. Fix validation strategy?
+   → 3-layer: re-scan + tests + regression check; confidence score decides approval
+   Location: Summary Q4, Report §4
+
+5. Rollback patterns?
+   → Safety check + revert PR; auto-merge if CI passes, else escalate
+   Location: Summary Q5, Report §5
+
+6. Existing platforms (Snyk, Mend, GitHub)?
+   → Snyk: 80% automation; Bitbucket: always draft PR; GitHub: patch-only auto-merge
+   Location: Summary Q6, Report §6
+
+7. Parallel vs sequential fix application?
+   → Independent vulns: 10 PRs; same dep: 1 PR; mixed severity: grouped by cadence
+   Location: Summary Q7, Report §7
+
+8. Transitive dependency handling?
+   → Pre-detect chains, group into single fix (1 PR resolves all)
+   → Example: fixing lodash also fixes express + moment
+   Location: Summary Q8, Report §8
+
+9. State persistence?
+   → DBOS system DB (workflow state) + app DB (47-field audit trail)
+   Location: Summary Q9, Report §9
+
+10. DBOS v4 mapping?
+    → Determinism rule: non-randomness INSIDE runStep()
+    → Loop steps: unique names per iteration
+    → Parallel: Promise.allSettled() for independent
+    → Gates: DBOS.recv() with timeout escalation
+    Location: Summary Q10, Report §10
+
+11. Security of the agent?
+    → Structured output (Zod) + AST validation + supply chain checks
+    → Temporal validation + npm audit + denylist
+    Location: Summary Q11, Report §11
+
+12. Open-source reference projects?
+    → Dependabot (GitHub), Snyk CLI, Trivy+ArgoCD, GUAC (OpenSSF)
+    Location: Summary Q12, Report §12
+
+═══════════════════════════════════════════════════════════════════════════════
+HOW TO USE THESE DOCUMENTS
+═══════════════════════════════════════════════════════════════════════════════
+
+ROLE: ARCHITECT
+  Step 1: Read Summary (Q1–Q3, Decision Table) — 10 min
+  Step 2: Review Report §1 (workflow diagram) + §10 (DBOS mappings) — 20 min
+  Step 3: Use implementation roadmap to plan phases — 10 min
+
+ROLE: ENGINEER
+  Step 1: Read Summary (all questions) — 15 min
+  Step 2: Study Report §2–4 (patterns with code examples) — 30 min
+  Step 3: Deep-dive Report §10 (DBOS v4 code patterns) — 30 min
+  Step 4: Reference Report §11 (security guardrails) — 10 min
+
+ROLE: SECURITY TEAM
+  Step 1: Read Summary Q11 (security) + Q6 (existing platforms) — 10 min
+  Step 2: Study Report §11 (threat model & defenses) — 20 min
+  Step 3: Review Report §9 (state persistence for audit) — 15 min
+
+ROLE: LEADERSHIP
+  Step 1: Read entire Summary — 15 min
+  Step 2: Review implementation roadmap + metrics — 10 min
+  Step 3: Use architecture decision table to justify choices — 5 min
+
+═══════════════════════════════════════════════════════════════════════════════
+KEY STATISTICS
+═══════════════════════════════════════════════════════════════════════════════
+
+Total documentation: 55.4 KB across 3 files
+Main report: 1,326 lines
+Code examples: 18 (TypeScript)
+ASCII diagrams: 2 (workflow, dependency)
+Decision tables: 25+
+References: 80+ sources analyzed
+Sections: 14 (main) + appendices
+
+═══════════════════════════════════════════════════════════════════════════════
+RESEARCH SOURCES
+═══════════════════════════════════════════════════════════════════════════════
+
+ATLASSIAN (Primary):
+  • Snyk automation pilot (Q2 FY2026) — real-world metrics
+  • Bitbucket Agentic Pipelines documentation
+  • AMS Vulnerability Intelligence Report (Q1 2026)
+  • FedRamp Vulnerability Funnel Workflow
+  • Jira Automation approval patterns
+
+DBOS SDK:
+  • poc-dbos-sales/.agents/skills/dbos-typescript/ (32 reference files)
+  • poc-dbos-sales PoC (sales analysis workflow)
+
+SECURITY & SUPPLY CHAIN:
+  • CSECR-24138: Dependency Confusion Attacks
+  • CSA-251335: ShaiHulud (npm malware)
+  • CSECR-25089: Supply Chain Threats
+  • GUAC (Graph for Understanding Artifact Composition)
+
+OPEN-SOURCE:
+  • GitHub Dependabot
+  • Snyk CLI
+  • Trivy + ArgoCD
+  • Mend (WhiteSource)
+
+═══════════════════════════════════════════════════════════════════════════════
+IMPLEMENTATION CHECKLIST
+═══════════════════════════════════════════════════════════════════════════════
+
+WEEK 1 (Planning):
+  □ Read Summary (30 min)
+  □ Review DBOS determinism rules (20 min)
+  □ Sketch MVP workflow (2 hours)
+
+WEEKS 2-4 (MVP):
+  □ Build scanner → triage → PR scaffold
+  □ Implement Slack approval bot
+  □ Test DBOS.recv() for human gates
+
+WEEKS 5-8 (Agentic):
+  □ Integrate real LLM (Claude/Gemini)
+  □ Implement validation sub-workflow
+  □ Calibrate confidence thresholds on 100+ fixes
+
+WEEKS 9-12 (Supply Chain):
+  □ Implement transitive dependency detection
+  □ Add rollback automation
+  □ Production monitoring integration
+
+WEEKS 13+ (Optimization):
+  □ Parallel approval workflow
+  □ Historical metrics calibration
+  □ Scale to enterprise usage
+
+═══════════════════════════════════════════════════════════════════════════════
+METRICS TO TRACK
+═══════════════════════════════════════════════════════════════════════════════
+
+1. Automation rate: % of vulns fixed without human (target: 80%)
+2. Escalation rate: % requiring human review (target: <10%)
+3. False positive rate: % introducing new vulns (target: <5%)
+4. Time to resolution: days from scan to merged (target: <3 for Critical)
+5. Confidence accuracy: correlation of score to actual fix quality (target: r²>0.8)
+
+═══════════════════════════════════════════════════════════════════════════════
+CRITICAL SUCCESS FACTORS
+═══════════════════════════════════════════════════════════════════════════════
+
+1. Confidence scoring calibration
+   - Test on 100+ real-world fixes
+   - Iterate on thresholds based on escalation patterns
+
+2. Transitive dependency detection
+   - Complex monorepos (npm, Maven)
+   - Verify algorithm handles deep chains
+
+3. Approval gate UX
+   - Frictionless Slack bot (1-click approve/reject)
+   - Fast notifications + context
+
+4. Rollback automation
+   - Test with actual GitHub repos
+   - Safety checks prevent unintended reverts
+
+5. Supply chain validation
+   - Maintain live denylist
+   - Temporal checks work at scale
+
+═══════════════════════════════════════════════════════════════════════════════
+RELATED WORKSPACE FILES
+═══════════════════════════════════════════════════════════════════════════════
+
+DBOS Reference (in poc-dbos-sales/.agents/skills/dbos-typescript/references/):
+  • workflow-determinism.md — Critical rules for deterministic workflows
+  • queue-basics.md — Concurrency management
+  • step-retries.md — Exponential backoff patterns
+  • comm-messages.md — DBOS.send() / DBOS.recv() patterns
+  • pattern-idempotency.md — Workflow ID deduplication
+
+Previous Research:
+  • research/learnings-2026-05-09-10.md — DBOS PoC learnings
+  • research/agentic-workflow-platform-2026-05-08.md — Workflow platform landscape
+
+═══════════════════════════════════════════════════════════════════════════════
+QUESTIONS OR FEEDBACK?
+═══════════════════════════════════════════════════════════════════════════════
+
+For clarifications on:
+
+DBOS Patterns:
+  → Refer to poc-dbos-sales/.agents/skills/dbos-typescript/references/
+
+Snyk Automation Data:
+  → See Atlassian asecurityteam wiki (internal, cited in report)
+
+Open-Source Implementations:
+  → GitHub repos:
+     - dependabot/dependabot-core
+     - snyk/snyk
+     - aquasecurity/trivy
+     - argoproj/argo-cd
+     - guacsec/guac
+
+═══════════════════════════════════════════════════════════════════════════════
+
+Generated: May 10, 2026
+Research Duration: ~1.5 hours
+Confidence Level: HIGH
+Status: Ready for implementation ✓
+

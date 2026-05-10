@@ -1,6 +1,6 @@
 // DBOS workflow: read sales → aggregate → analyse → write insights.
 import { DBOS } from "@dbos-inc/dbos-sdk";
-import { bootstrapAndGetDb } from "../db/sqlite";
+import { query, queryOne } from "../db/postgres";
 import { analyzeSales, AggregatedSales, AnalysisResult } from "../agent/mockAgent";
 
 interface SalesRow {
@@ -20,14 +20,13 @@ export interface AnalyzeWorkflowResult {
 
 async function readSalesData(year: number): Promise<SalesRow[]> {
   await new Promise((r) => setTimeout(r, 2000));
-  const rows = bootstrapAndGetDb()
-    .prepare(
-      `SELECT order_date, product, region, units, revenue
-       FROM sales
-       WHERE order_date >= ? AND order_date < ?
-       ORDER BY order_date ASC`,
-    )
-    .all(`${year}-01-01`, `${year + 1}-01-01`) as SalesRow[];
+  const rows = await query<SalesRow>(
+    `SELECT order_date, product, region, units, revenue
+     FROM sales
+     WHERE order_date >= $1 AND order_date < $2
+     ORDER BY order_date ASC`,
+    [`${year}-01-01`, `${year + 1}-01-01`],
+  );
   DBOS.logger.info(`[worker]   step1/readSalesData: ${rows.length} rows for ${year}`);
   return rows;
 }
@@ -82,30 +81,29 @@ async function writeInsights(
   aggregated: AggregatedSales,
   analysis: AnalysisResult,
 ): Promise<number> {
-  const result = bootstrapAndGetDb()
-    .prepare(
-      `INSERT INTO sales_insights
-         (workflow_id, year, generated_at, total_revenue, total_units,
-          top_product, top_region, summary, insights_json)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-       ON CONFLICT(workflow_id) DO UPDATE SET
-         generated_at  = excluded.generated_at,
-         total_revenue = excluded.total_revenue,
-         total_units   = excluded.total_units,
-         top_product   = excluded.top_product,
-         top_region    = excluded.top_region,
-         summary       = excluded.summary,
-         insights_json = excluded.insights_json
-       RETURNING id`,
-    )
-    .get(
+  const row = await queryOne<{ id: number }>(
+    `INSERT INTO sales_insights
+       (workflow_id, year, generated_at, total_revenue, total_units,
+        top_product, top_region, summary, insights_json)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+     ON CONFLICT(workflow_id) DO UPDATE SET
+       generated_at  = EXCLUDED.generated_at,
+       total_revenue = EXCLUDED.total_revenue,
+       total_units   = EXCLUDED.total_units,
+       top_product   = EXCLUDED.top_product,
+       top_region    = EXCLUDED.top_region,
+       summary       = EXCLUDED.summary,
+       insights_json = EXCLUDED.insights_json
+     RETURNING id`,
+    [
       workflowId, year, new Date().toISOString(),
       aggregated.totalRevenue, aggregated.totalUnits,
       analysis.topProduct, analysis.topRegion,
       analysis.summary, JSON.stringify({ aggregated, analysis }),
-    ) as { id: number };
-  DBOS.logger.info(`[worker]   step4/writeInsights: persisted insights id=${result.id}`);
-  return result.id;
+    ],
+  );
+  DBOS.logger.info(`[worker]   step4/writeInsights: persisted insights id=${row!.id}`);
+  return row!.id;
 }
 
 async function analyzeYear(year: number): Promise<AnalyzeWorkflowResult> {
