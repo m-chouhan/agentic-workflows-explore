@@ -16,7 +16,10 @@
     "dbos:reset": "npx dbos reset --yes"
   },
   "dependencies": {
+    "@ai-sdk/google": "^3.0.71",
+    "@ai-sdk/openai": "^3.0.63",
     "@dbos-inc/dbos-sdk": "^4.17.6",
+    "ai": "^6.0.177",
     "better-sqlite3": "^11.3.0",
     "dotenv": "^17.4.2",
     "express": "^4.21.0",

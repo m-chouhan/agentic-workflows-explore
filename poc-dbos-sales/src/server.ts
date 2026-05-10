@@ -1,5 +1,4 @@
 // App server — Express + DBOSClient. Enqueues workflows by string name only;
-// zero workflow code imported. Coordinates with worker via shared Postgres.
 import * as dotenv from "dotenv";
 dotenv.config();
 
