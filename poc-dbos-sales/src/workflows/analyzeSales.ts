@@ -112,12 +112,9 @@ async function analyzeYear(year: number): Promise<AnalyzeWorkflowResult> {
   const workflowId = DBOS.workflowID ?? `wf-${Date.now()}`;
   DBOS.logger.info(`[worker] ▶ WORKFLOW START  analyzeYear(${year})  workflowId=${workflowId}`);
 
-  // v4: runStep takes a zero-arg closure — bind args via closure capture.
   const rows       = await DBOS.runStep(() => readSalesData(year));
   const aggregated = await DBOS.runStep(() => aggregateSales(year, rows));
 
-  // Agent failure fallback — completes as SUCCESS with degraded result.
-  // In production: swap with human-in-the-loop signal or alert step.
   let analysis: AnalysisResult;
   try {
     // Retry config: handles transient LLM 5xx / rate-limit errors.

@@ -1,8 +1,7 @@
-// Sales analysis agent — uses Vercel AI SDK generateObject for structured LLM output.
-// Same AggregatedSales → AnalysisResult contract as before; drop-in replacement.
-import { generateObject } from "ai";
+import { generateText, Output } from "ai";
 import { google } from "@ai-sdk/google";
 import { z } from "zod";
+import { DBOS } from "@dbos-inc/dbos-sdk";
 
 export const AggregatedSalesSchema = z.object({
   year:         z.number().int(),
@@ -29,18 +28,24 @@ export async function analyzeSales(data: AggregatedSales): Promise<AnalysisResul
     throw new Error(`No sales data found for year ${data.year}`);
   }
 
+  const prompt = [
+    `You are a senior business analyst. Analyse the following sales data for ${data.year} and generate structured insights.`,
+    `Be specific — use actual numbers from the data. Identify risks if revenue is declining or a product is underperforming.`,
+    ``,
+    `Sales data:`,
+    JSON.stringify(data, null, 2),
+  ].join("\n");
+
+  DBOS.logger.info(`[agent] → ${prompt.length} chars | model=${process.env.GOOGLE_MODEL ?? "gemini-flash-latest"}`);
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { object } = await (generateObject as any)({
-    model: google((process.env.GOOGLE_MODEL ?? "gemini-2.0-flash") as any),
-    schema: AnalysisResultSchema,
-    prompt: [
-      `You are a senior business analyst. Analyse the following sales data for ${data.year} and generate structured insights.`,
-      `Be specific — use actual numbers from the data. Identify risks if revenue is declining or a product is underperforming.`,
-      ``,
-      `Sales data:`,
-      JSON.stringify(data, null, 2),
-    ].join("\n"),
+  const { experimental_output: object, usage } = await (generateText as any)({
+    model: google((process.env.GOOGLE_MODEL ?? "gemini-flash-latest") as any),
+    output: (Output.object as any)({ schema: AnalysisResultSchema }),
+    prompt,
   });
+
+  DBOS.logger.info(`[agent] ← tokens in=${usage.promptTokens} out=${usage.completionTokens} | top=${(object as AnalysisResult).topProduct}`);
 
   return object as AnalysisResult;
 }

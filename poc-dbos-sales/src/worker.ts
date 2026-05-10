@@ -29,7 +29,7 @@ async function main(): Promise<void> {
 
   await DBOS.registerQueue(ANALYSIS_QUEUE_NAME);
 
-  console.log(`[worker] launched  pid=${process.pid}  executorId=${executorId}  queue="${ANALYSIS_QUEUE_NAME}"`);
+  DBOS.logger.info(`[worker] launched  pid=${process.pid}  executorId=${executorId}  queue="${ANALYSIS_QUEUE_NAME}"`);
 
   const shutdown = async () => { await DBOS.shutdown(); process.exit(0); };
   process.on("SIGTERM", shutdown);
