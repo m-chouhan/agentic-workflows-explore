@@ -2,7 +2,9 @@
 
 ## Project Overview
 Exploring agentic workflow orchestration using DBOS (PoC #1) and Temporal (PoC #2 planned).
-Tech stack: Node.js / TypeScript, Express, DBOS SDK v4, Vercel AI SDK, SQLite (business data), Postgres (DBOS system state).
+Tech stack: Node.js / TypeScript, Express, DBOS SDK v4, Vercel AI SDK, **Postgres only** (business data + DBOS system state in same DB, different tables).
+Project lives in `dbos-agentic-platform/` (renamed from `poc-dbos-sales`).
+Two workflows: `analyzeYear` (sales analysis) + `scanAndFix` (vulnerability scan → triage → persist).
 
 ---
 
@@ -53,9 +55,36 @@ Tech stack: Node.js / TypeScript, Express, DBOS SDK v4, Vercel AI SDK, SQLite (b
 - Restarting the worker process is required when `.env` is updated — `tsx watch` does NOT reload env vars on file change.
 
 ### Google Gemini API
-- `gemini-2.0-flash` may show quota 0 on new accounts — try `gemini-flash-latest` or `gemini-1.5-flash` instead.
-- `gemini-flash-latest` resolves to the latest Gemini flash model (currently `gemini-3-flash-preview`) and tends to have quota available.
+- `gemini-flash-latest` resolves to `gemini-3-flash` which has a **20 RPD** (requests per day) free tier limit — easy to exhaust during dev.
+- `gemini-2.5-flash` is the correct model ID for Vercel AI SDK (NOT `gemini-2.5-flash-preview-04-17` — that format is rejected).
+- Check quota at [ai.dev/rate-limit](https://ai.dev/rate-limit) — look at RPD column, not just RPM.
 - The env var name for Vercel AI SDK Google provider is `GOOGLE_GENERATIVE_AI_API_KEY` (not `GOOGLE_API_KEY`).
+- Always use `getModel()` (function) not `DEFAULT_MODEL` (constant) — env vars must be read at call time, not import time.
+
+### Config / Environment Variables
+- All config must come from `.env` — never hardcode defaults in `server.ts` / `worker.ts` / `postgres.ts`.
+- Use a `required(key)` helper that throws early with a clear message if an env var is missing.
+- DB URL, model, pool size — build lazily via functions in `config.ts` (called after `dotenv.config()`).
+- Module-level constants (e.g., `export const DEFAULT_MODEL = process.env.X`) are evaluated at import time — may read before dotenv runs. Use functions instead.
+- After changing `.env`, fully stop and restart the process — `tsx watch` does NOT hot-reload env vars.
+
+### DBOS Versioning (app_version hash)
+- DBOS computes an `application_version` hash from workflow source code. Any code change = new hash.
+- Workers only recover workflows from their own app version. PENDING workflows from an older version will NOT be picked up by a new version worker automatically.
+- After a code change during dev: old PENDING workflows stay stuck. Just enqueue a new workflow — don't try to rescue the old one.
+- In production: use rolling deploys and drain old version before retiring it.
+
+### DBOS Database Naming
+- DBOS system DB is named `<PGDATABASE>_dbos_sys`. If you rename PGDATABASE, DBOS creates a new system DB.
+- Business tables live in the same Postgres DB as the DBOS system schema (schema name: `dbos`).
+- When starting fresh (new DB name), DBOS auto-runs migrations on first `DBOS.launch()` — you see `Running DBOS system database migrations...` in logs.
+- Check tables with: `docker exec <container> psql -U dbos -d <dbname> -c "\dt dbos.*"`
+
+### Multi-Workflow Pattern (confirmed in practice)
+- One worker can register multiple queues and import multiple workflow modules — no architectural change needed.
+- Each workflow registers itself via `DBOS.registerWorkflow()` at import time — just import the module in worker.ts.
+- Server uses string names only — never imports workflow code.
+- `npm audit --json` exits with code 1 when vulnerabilities are found — this is expected, not an error. Always catch and parse stdout.
 
 ### Git & Embedded Repos
 - Cloning reference repos (e.g. `dbos-demo-apps`) inside the workspace creates an embedded git repo warning. Best practice: add to `.gitignore` with `echo "dbos-demo-apps/" >> .gitignore` and `git rm --cached dbos-demo-apps` if already staged.
