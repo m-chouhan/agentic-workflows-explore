@@ -8,12 +8,10 @@
     "build": "tsc",
     "dev:worker": "tsx watch src/worker.ts",
     "dev:server": "tsx watch src/server.ts",
-    "dev": "npm run dev:worker",
     "start:worker": "node dist/src/worker.js",
     "start:server": "node dist/src/server.js",
     "seed": "tsx scripts/seed-sales.ts",
-    "dbos:migrate": "npx dbos migrate",
-    "dbos:reset": "npx dbos reset --yes"
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@ai-sdk/google": "^3.0.71",

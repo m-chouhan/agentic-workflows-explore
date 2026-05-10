@@ -1,12 +1,11 @@
 /**
  * Vulnerability Triage Agent — uses LLM structured output to prioritise
  * and classify scan findings with reasoning.
- *
- * Same pattern as mockAgent.ts (sales): generateText + Zod schema = type-safe output.
  */
 import { generateText, Output } from "ai";
 import { google } from "@ai-sdk/google";
 import { DBOS } from "@dbos-inc/dbos-sdk";
+import { DEFAULT_MODEL } from "../config";
 import { ScanFinding, TriageResultSchema, TriageResult } from "../schemas/vulnSchemas";
 
 export async function triageFindings(findings: ScanFinding[]): Promise<TriageResult> {
@@ -35,7 +34,7 @@ export async function triageFindings(findings: ScanFinding[]): Promise<TriageRes
   DBOS.logger.info(`[triage-agent] → ${findings.length} findings | ${prompt.length} chars`);
 
   const { experimental_output: object, usage } = await (generateText as any)({
-    model: google((process.env.GOOGLE_MODEL ?? "gemini-2.0-flash") as any),
+    model: google(DEFAULT_MODEL as any),
     output: (Output.object as any)({ schema: TriageResultSchema }),
     prompt,
   });

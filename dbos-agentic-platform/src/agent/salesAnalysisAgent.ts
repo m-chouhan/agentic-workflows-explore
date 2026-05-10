@@ -1,7 +1,12 @@
+/**
+ * Sales Analysis Agent — uses LLM structured output to generate
+ * business insights from aggregated sales data.
+ */
 import { generateText, Output } from "ai";
 import { google } from "@ai-sdk/google";
 import { z } from "zod";
 import { DBOS } from "@dbos-inc/dbos-sdk";
+import { DEFAULT_MODEL } from "../config";
 
 export const AggregatedSalesSchema = z.object({
   year:         z.number().int(),
@@ -36,15 +41,15 @@ export async function analyzeSales(data: AggregatedSales): Promise<AnalysisResul
     JSON.stringify(data, null, 2),
   ].join("\n");
 
-  DBOS.logger.info(`[agent] → ${prompt.length} chars | model=${process.env.GOOGLE_MODEL ?? "gemini-flash-latest"}`);
+  DBOS.logger.info(`[sales-agent] → ${prompt.length} chars | model=${DEFAULT_MODEL}`);
 
   const { experimental_output: object, usage } = await (generateText as any)({
-    model: google((process.env.GOOGLE_MODEL ?? "gemini-flash-latest") as any),
+    model: google(DEFAULT_MODEL as any),
     output: (Output.object as any)({ schema: AnalysisResultSchema }),
     prompt,
   });
 
-  DBOS.logger.info(`[agent] ← tokens in=${usage.inputTokens} out=${usage.outputTokens} | top=${(object as AnalysisResult).topProduct}`);
+  DBOS.logger.info(`[sales-agent] ← tokens in=${usage.inputTokens} out=${usage.outputTokens} | top=${(object as AnalysisResult).topProduct}`);
 
   return object as AnalysisResult;
 }

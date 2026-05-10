@@ -1,7 +1,7 @@
 // DBOS workflow: read sales → aggregate → analyse → write insights.
 import { DBOS } from "@dbos-inc/dbos-sdk";
 import { query, queryOne } from "../db/postgres";
-import { analyzeSales, AggregatedSales, AnalysisResult } from "../agent/mockAgent";
+import { analyzeSales, AggregatedSales, AnalysisResult } from "../agent/salesAnalysisAgent";
 
 interface SalesRow {
   order_date: string;
@@ -19,7 +19,6 @@ export interface AnalyzeWorkflowResult {
 }
 
 async function readSalesData(year: number): Promise<SalesRow[]> {
-  await new Promise((r) => setTimeout(r, 2000));
   const rows = await query<SalesRow>(
     `SELECT order_date, product, region, units, revenue
      FROM sales
@@ -27,12 +26,11 @@ async function readSalesData(year: number): Promise<SalesRow[]> {
      ORDER BY order_date ASC`,
     [`${year}-01-01`, `${year + 1}-01-01`],
   );
-  DBOS.logger.info(`[worker]   step1/readSalesData: ${rows.length} rows for ${year}`);
+  DBOS.logger.info(`[worker] readSalesData: ${rows.length} rows for ${year}`);
   return rows;
 }
 
 async function aggregateSales(year: number, rows: SalesRow[]): Promise<AggregatedSales> {
-  await new Promise((r) => setTimeout(r, 2000));
   const byProductMap = new Map<string, { revenue: number; units: number }>();
   const byRegionMap  = new Map<string, number>();
   const byMonthMap   = new Map<string, number>();
@@ -66,12 +64,12 @@ async function aggregateSales(year: number, rows: SalesRow[]): Promise<Aggregate
       .sort((a, b) => a.month.localeCompare(b.month)),
   };
 
-  DBOS.logger.info(`[worker]   step2/aggregateSales: total=$${aggregated.totalRevenue}, products=${aggregated.byProduct.length}`);
+  DBOS.logger.info(`[worker] aggregateSales: total=$${aggregated.totalRevenue}, products=${aggregated.byProduct.length}`);
   return aggregated;
 }
 
 async function runAnalysisAgent(aggregated: AggregatedSales): Promise<AnalysisResult> {
-  DBOS.logger.info(`[worker]   step3/runAnalysisAgent: invoking mock agent for ${aggregated.year}`);
+  DBOS.logger.info(`[worker] runAnalysisAgent: invoking for ${aggregated.year}`);
   return analyzeSales(aggregated);
 }
 
@@ -102,22 +100,22 @@ async function writeInsights(
       analysis.summary, JSON.stringify({ aggregated, analysis }),
     ],
   );
-  DBOS.logger.info(`[worker]   step4/writeInsights: persisted insights id=${row!.id}`);
-  return row!.id;
+  if (!row) throw new Error("writeInsights returned no row");
+  DBOS.logger.info(`[worker] writeInsights: persisted id=${row.id}`);
+  return row.id;
 }
 
 async function analyzeYear(year: number): Promise<AnalyzeWorkflowResult> {
   const workflowId = DBOS.workflowID ?? `wf-${Date.now()}`;
-  DBOS.logger.info(`[worker] ▶ WORKFLOW START  analyzeYear(${year})  workflowId=${workflowId}`);
+  DBOS.logger.info(`[worker] ▶ analyzeYear(${year})  workflowId=${workflowId}`);
 
   const rows       = await DBOS.runStep(() => readSalesData(year));
   const aggregated = await DBOS.runStep(() => aggregateSales(year, rows));
 
   let analysis: AnalysisResult;
   try {
-    // Retry config: handles transient LLM 5xx / rate-limit errors.
     analysis = await DBOS.runStep(() => runAnalysisAgent(aggregated), {
-      retriesAllowed: true, maxAttempts: 4, intervalSeconds: 2, backoffRate: 2,
+      retriesAllowed: true, maxAttempts: 3, intervalSeconds: 2, backoffRate: 2,
     });
   } catch (err) {
     DBOS.logger.error(`runAnalysisAgent exhausted retries for ${year}: ${(err as Error).message}`);
@@ -133,7 +131,7 @@ async function analyzeYear(year: number): Promise<AnalyzeWorkflowResult> {
 
   const insightsId = await DBOS.runStep(() => writeInsights(workflowId, year, aggregated, analysis));
 
-  DBOS.logger.info(`[worker] ✓ WORKFLOW DONE  workflowId=${workflowId}  insightsId=${insightsId}  revenue=$${aggregated.totalRevenue}`);
+  DBOS.logger.info(`[worker] ✓ analyzeYear done  workflowId=${workflowId}  insightsId=${insightsId}  revenue=$${aggregated.totalRevenue}`);
   return { workflowId, year, insightsId, analysis };
 }
 

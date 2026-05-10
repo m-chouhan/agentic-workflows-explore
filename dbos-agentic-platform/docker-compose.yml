@@ -1,5 +1,4 @@
 services:
-  # ── Postgres — DBOS system database (workflow state + step checkpoints) ──────
   postgres:
     image: postgres:16
     container_name: dbos-agentic-postgres
@@ -17,14 +16,12 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+    networks:
+      - dbos-net
 
-  # ── Worker — DBOS executor (owns all workflow + step definitions) ─────────────
-  # Polls Postgres queue "analysis-queue" and executes workflows.
-  # Has NO HTTP server — purely a background worker.
-  # Scale horizontally: docker compose up --scale worker=3
   worker:
     build: .
-    command: npx tsx src/worker.ts
+    command: node dist/src/worker.js
     restart: unless-stopped
     depends_on:
       postgres:
@@ -35,17 +32,16 @@ services:
       PGUSER: dbos
       PGPASSWORD: dbos
       PGDATABASE: dbos_sales
-      VULN_QUEUE_NAME: vuln-queue
-      # Unique per replica — in K8s use Downward API (metadata.name)
       DBOS_EXECUTOR_ID: worker-1
-    profiles:
-      - full  # only starts with: docker compose --profile full up
+      GOOGLE_GENERATIVE_AI_API_KEY: ${GOOGLE_GENERATIVE_AI_API_KEY:-}
+      GOOGLE_MODEL: ${GOOGLE_MODEL:-gemini-flash-latest}
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+    networks:
+      - dbos-net
 
-  # ── App Server — Express + DBOSClient (HTTP trigger, NO workflow code) ────────
-  # Enqueues work by string name only. Knows nothing about workflow implementations.
   app-server:
     build: .
-    command: npx tsx src/server.ts
+    command: node dist/src/server.js
     restart: unless-stopped
     depends_on:
       postgres:
@@ -59,10 +55,11 @@ services:
       PGUSER: dbos
       PGPASSWORD: dbos
       PGDATABASE: dbos_sales
-      ANALYSIS_QUEUE_NAME: analysis-queue
-      VULN_QUEUE_NAME: vuln-queue
-    profiles:
-      - full  # only starts with: docker compose --profile full up
+    networks:
+      - dbos-net
+
+networks:
+  dbos-net:
 
 volumes:
   dbos_pg_data:

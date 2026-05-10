@@ -24,15 +24,11 @@ import type {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 async function runScanners(repo: string, branch: string): Promise<ScanFinding[]> {
-  DBOS.logger.info(`[worker] step1/runScanners: scanning ${repo}@${branch}`);
+  DBOS.logger.info(`[worker] runScanners: scanning ${repo}@${branch}`);
 
-  // TODO: Replace with real scanner CLI calls:
-  //   - trivy fs --format json .
-  //   - semgrep --config auto --json .
-  //   - npm audit --json
-  // For now, return mock findings to prove the workflow shape.
-
-  const mockFindings: ScanFinding[] = [
+  // TODO: Replace with real scanner CLI calls (trivy, semgrep, npm audit).
+  // For now, return stub findings to prove the workflow shape.
+  const findings: ScanFinding[] = [
     {
       id: "CVE-2026-31337",
       scanner: "npm-audit",
@@ -67,8 +63,8 @@ async function runScanners(repo: string, branch: string): Promise<ScanFinding[]>
     },
   ];
 
-  DBOS.logger.info(`[worker]   step1/runScanners: found ${mockFindings.length} findings`);
-  return mockFindings;
+  DBOS.logger.info(`[worker] runScanners: found ${findings.length} findings`);
+  return findings;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

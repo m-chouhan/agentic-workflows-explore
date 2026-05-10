@@ -1,15 +1,12 @@
 /**
- * Postgres connection pool — replaces SQLite singleton.
- *
- * Uses the same PGHOST/PGPORT/PGUSER/PGPASSWORD/PGDATABASE env vars
- * that DBOS already reads for its system database. Business data lives
- * in the SAME Postgres instance (same database), just different tables.
- *
- * On first call to getPool(), we also run schema.sql to ensure tables exist.
+ * Postgres connection pool for business data.
+ * Business tables live in the same database as DBOS system state.
+ * On first call to ensureSchema(), we run schema.sql to create tables if needed.
  */
-import { Pool, PoolClient } from "pg";
+import { Pool } from "pg";
 import * as fs from "fs";
 import * as path from "path";
+import { DB_POOL_MAX } from "../config";
 
 let _pool: Pool | undefined;
 let _schemaApplied = false;
@@ -25,7 +22,7 @@ function buildConnectionString(): string {
 
 export function getPool(): Pool {
   if (_pool) return _pool;
-  _pool = new Pool({ connectionString: buildConnectionString(), max: 10 });
+  _pool = new Pool({ connectionString: buildConnectionString(), max: DB_POOL_MAX });
   return _pool;
 }
 
@@ -33,9 +30,14 @@ export function getPool(): Pool {
 export async function ensureSchema(): Promise<void> {
   if (_schemaApplied) return;
   const schemaPath = path.join(__dirname, "schema.sql");
-  const schema = fs.readFileSync(schemaPath, "utf8");
-  await getPool().query(schema);
-  _schemaApplied = true;
+  try {
+    const schema = fs.readFileSync(schemaPath, "utf8");
+    await getPool().query(schema);
+    _schemaApplied = true;
+  } catch (err) {
+    _schemaApplied = false;
+    throw new Error(`Failed to apply schema from ${schemaPath}: ${(err as Error).message}`);
+  }
 }
 
 /** Graceful shutdown — drain the pool. */
@@ -47,7 +49,7 @@ export async function closePool(): Promise<void> {
   }
 }
 
-/** Convenience: run a single parameterised query and return rows. */
+/** Run a parameterised query and return rows. */
 export async function query<T = Record<string, unknown>>(
   sql: string,
   params: unknown[] = [],
@@ -56,7 +58,7 @@ export async function query<T = Record<string, unknown>>(
   return result.rows as T[];
 }
 
-/** Convenience: run a query and return first row or undefined. */
+/** Run a query and return first row or undefined. */
 export async function queryOne<T = Record<string, unknown>>(
   sql: string,
   params: unknown[] = [],
