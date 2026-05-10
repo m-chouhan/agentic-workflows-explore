@@ -1,0 +1,12 @@
+{
+  "name": "vuln-test-project",
+  "version": "1.0.0",
+  "private": true,
+  "dependencies": {
+    "lodash": "4.17.19",
+    "minimist": "1.2.5",
+    "node-fetch": "2.6.0",
+    "tar": "4.4.13",
+    "json5": "1.0.1"
+  }
+}

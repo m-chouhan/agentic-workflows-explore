@@ -1,7 +1,7 @@
 /**
  * DBOS Workflow: Scan → Policy → Triage → Persist
  *
- * Phase 1: Shallow-clone public repo, run npm audit (deterministic)
+ * Phase 1: Shallow-clone public repo, run Trivy filesystem scan (deterministic)
  * Phase 2: Policy evaluation (deterministic — CVSS threshold)
  * Phase 3: Triage (agentic — LLM prioritises findings with reasoning)
  * Phase 4: Persist results to Postgres
@@ -12,10 +12,10 @@ import { triageFindings } from "../agent/vulnTriageAgent";
 import type { ScanFinding, TriageResult, ScanAndFixResult } from "../schemas/vulnSchemas";
 import { exec } from "child_process";
 import { promisify } from "util";
-import * as fs from "fs";
-import * as path from "path";
 
 const execAsync = promisify(exec);
+
+// ── Clone (deterministic) ────────────────────────────────────────────────────
 
 async function cloneRepo(repo: string, branch: string, workDir: string): Promise<void> {
   const url = `https://github.com/${repo}.git`;
@@ -23,74 +23,95 @@ async function cloneRepo(repo: string, branch: string, workDir: string): Promise
   await execAsync(`git clone --depth 1 --branch ${branch} ${url} ${workDir}`, { timeout: 60_000 });
 }
 
-interface NpmAuditVuln {
-  severity: string;
-  range: string;
-  fixAvailable?: { name: string; version: string } | boolean;
-  via: Array<{ title?: string; url?: string; severity?: string; cwe?: string[] } | string>;
+// ── Trivy scanner (deterministic) ────────────────────────────────────────────
+
+interface TrivyVuln {
+  VulnerabilityID: string;
+  PkgName: string;
+  InstalledVersion: string;
+  FixedVersion?: string;
+  Severity: string;
+  Title?: string;
+  PrimaryURL?: string;
+  CweIDs?: string[];
 }
 
-function mapNpmSeverity(sev: string): "critical" | "high" | "medium" | "low" | "info" {
-  switch (sev) {
-    case "critical": return "critical";
-    case "high":     return "high";
-    case "moderate": return "medium";
-    case "low":      return "low";
+interface TrivyResult {
+  Target: string;
+  Type: string;
+  Vulnerabilities?: TrivyVuln[];
+}
+
+interface TrivyReport {
+  Results?: TrivyResult[];
+}
+
+function mapTrivySeverity(sev: string): "critical" | "high" | "medium" | "low" | "info" {
+  switch (sev.toUpperCase()) {
+    case "CRITICAL": return "critical";
+    case "HIGH":     return "high";
+    case "MEDIUM":   return "medium";
+    case "LOW":      return "low";
     default:         return "info";
   }
 }
 
-async function runNpmAudit(workDir: string): Promise<ScanFinding[]> {
-  DBOS.logger.info(`[worker] runNpmAudit: ${workDir}`);
+async function runTrivy(workDir: string): Promise<ScanFinding[]> {
+  DBOS.logger.info(`[worker] runTrivy: scanning ${workDir}`);
 
   let stdout: string;
   try {
-    // npm audit exits non-zero when vulns found — that's expected
-    const result = await execAsync("npm audit --json 2>/dev/null", { cwd: workDir, timeout: 30_000 });
+    const result = await execAsync(
+      `trivy fs --format json --scanners vuln --quiet ${workDir}`,
+      { timeout: 120_000, maxBuffer: 10 * 1024 * 1024 }, // 10MB buffer for large reports
+    );
     stdout = result.stdout;
   } catch (err: any) {
-    // exit code 1 = vulns found, stdout still has valid JSON
     if (err.stdout) {
       stdout = err.stdout;
     } else {
-      DBOS.logger.error(`[worker] npm audit failed: ${err.message}`);
+      DBOS.logger.error(`[worker] trivy failed: ${err.message}`);
       return [];
     }
   }
 
-  let audit: { vulnerabilities?: Record<string, NpmAuditVuln> };
+  let report: TrivyReport;
   try {
-    audit = JSON.parse(stdout);
+    report = JSON.parse(stdout);
   } catch {
-    DBOS.logger.error(`[worker] npm audit returned invalid JSON`);
+    DBOS.logger.error(`[worker] trivy returned invalid JSON`);
     return [];
   }
 
-  const vulns = audit.vulnerabilities ?? {};
   const findings: ScanFinding[] = [];
+  const seen = new Set<string>(); // deduplicate by VulnerabilityID
 
-  for (const [name, v] of Object.entries(vulns)) {
-    // v.via can be strings (transitive ref) or objects (actual advisory)
-    const advisory = v.via.find((x): x is Exclude<typeof x, string> => typeof x !== "string");
+  for (const result of report.Results ?? []) {
+    for (const v of result.Vulnerabilities ?? []) {
+      if (seen.has(v.VulnerabilityID)) continue;
+      seen.add(v.VulnerabilityID);
 
-    const fixVersion = typeof v.fixAvailable === "object" ? v.fixAvailable.version : undefined;
-    const cweId = advisory?.cwe?.[0];
+      findings.push({
+        id: v.VulnerabilityID,
+        scanner: "trivy",
+        severity: mapTrivySeverity(v.Severity),
+        packageName: v.PkgName,
+        currentVersion: v.InstalledVersion,
+        fixedVersion: v.FixedVersion,
+        cweId: v.CweIDs?.[0],
+        filePath: result.Target,
+        description: v.Title ?? `Vulnerability in ${v.PkgName}`,
+      });
+    }
 
-    findings.push({
-      id: advisory?.url ?? `npm-${name}`,
-      scanner: "npm-audit",
-      severity: mapNpmSeverity(v.severity),
-      packageName: name,
-      currentVersion: v.range,
-      fixedVersion: fixVersion,
-      cweId,
-      description: advisory?.title ?? `Vulnerability in ${name}`,
-    });
+    DBOS.logger.info(`[worker] runTrivy: ${result.Target} (${result.Type}): ${(result.Vulnerabilities ?? []).length} vulns`);
   }
 
-  DBOS.logger.info(`[worker] runNpmAudit: found ${findings.length} vulnerabilities`);
+  DBOS.logger.info(`[worker] runTrivy: ${findings.length} unique findings total`);
   return findings;
 }
+
+// ── Scan orchestrator ────────────────────────────────────────────────────────
 
 async function runScanners(repo: string, branch: string): Promise<ScanFinding[]> {
   DBOS.logger.info(`[worker] runScanners: ${repo}@${branch}`);
@@ -98,29 +119,19 @@ async function runScanners(repo: string, branch: string): Promise<ScanFinding[]>
   const workDir = `/tmp/scan-${Date.now()}`;
   try {
     await cloneRepo(repo, branch, workDir);
-
-    const findings: ScanFinding[] = [];
-
-    // npm audit (if Node.js project)
-    if (fs.existsSync(path.join(workDir, "package-lock.json"))) {
-      findings.push(...await runNpmAudit(workDir));
-    } else {
-      DBOS.logger.info(`[worker] runScanners: no package-lock.json found, skipping npm audit`);
-    }
-
-    // TODO: Add trivy, semgrep here for broader coverage
-
-    DBOS.logger.info(`[worker] runScanners: ${findings.length} total findings`);
-    return findings;
+    return await runTrivy(workDir);
   } finally {
-    // Always cleanup
     await execAsync(`rm -rf ${workDir}`).catch(() => {});
   }
 }
 
+// ── Policy (deterministic) ───────────────────────────────────────────────────
+
 function countBlockers(findings: ScanFinding[]): number {
   return findings.filter((f) => f.severity === "critical" || (f.cvss ?? 0) >= 9.0).length;
 }
+
+// ── Persist (deterministic, idempotent) ──────────────────────────────────────
 
 async function writeScanResults(
   workflowId: string,

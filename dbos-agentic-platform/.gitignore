@@ -1,4 +1,5 @@
 node_modules/
+test-fixtures/vuln-project/node_modules/
 dist/
 data/
 .env

@@ -7,7 +7,8 @@ COPY src/ src/
 RUN npm run build
 
 FROM node:20-alpine
-RUN apk add --no-cache git
+RUN apk add --no-cache git curl \
+    && curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin
 WORKDIR /app
 COPY package*.json ./
 RUN npm ci --omit=dev
