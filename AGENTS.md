@@ -1,10 +1,20 @@
 # Workspace Memory — AI Agent Workflow Explore
 
 ## Project Overview
-Exploring agentic workflow orchestration using DBOS (PoC #1) and Temporal (PoC #2 planned).
-Tech stack: Node.js / TypeScript, Express, DBOS SDK v4, Vercel AI SDK, **Postgres only** (business data + DBOS system state in same DB, different tables).
+**DBOS is our chosen workflow orchestration platform.** Evaluated DBOS vs Temporal — DBOS wins on simplicity (just TypeScript + Postgres, no separate orchestration server, no workflow DSL). Will only revisit Temporal if we hit actual scale limits.
+
+Tech stack: Node.js / TypeScript, Express, DBOS SDK v4, Vercel AI SDK, Trivy, **Postgres only** (business data + DBOS system state in same DB, different tables).
 Project lives in `dbos-agentic-platform/` (renamed from `poc-dbos-sales`).
 Two workflows: `analyzeYear` (sales analysis) + `scanAndFix` (vulnerability scan → triage → persist).
+
+### Why DBOS over Temporal
+- **No infra to manage** — just Postgres. No Temporal Server, no Cassandra/MySQL backend.
+- **Plain TypeScript** — `if/else`, `for` loops, `try/catch`. No workflow DSL, no "activities" concept.
+- **Postgres-backed queues** — `FOR UPDATE SKIP LOCKED` = no message broker needed.
+- **Retry/fallback as config** — `{ retriesAllowed: true, maxAttempts: 2 }` on any step.
+- **Queue-worker split is clean** — server knows zero workflow code, just enqueues by string name.
+- **Deterministic + agentic in same workflow** — scanner steps are deterministic, LLM steps are agentic, both are just `DBOS.runStep()`.
+- **Cost** — Postgres is the only dependency. Temporal needs 3+ services minimum.
 
 ---
 
