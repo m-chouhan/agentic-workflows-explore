@@ -1,4 +1,3 @@
-// App server — Express + DBOSClient. Enqueues workflows by string name only.
 import * as dotenv from "dotenv";
 dotenv.config();
 
@@ -24,13 +23,13 @@ async function main(): Promise<void> {
 
   app.get("/healthz", (_req, res) => res.json({ ok: true, ts: new Date().toISOString() }));
 
-  app.use(buildSalesRouter(client));
-  app.use(buildVulnRouter(client));
+  app.use("/workflow", buildSalesRouter(client));
+  app.use("/workflow", buildVulnRouter(client));
 
   app.listen(PORT, () => {
     console.log(`[server] listening on http://localhost:${PORT}`);
-    console.log(`  POST /api/analyze   { "year": 2025 }`);
-    console.log(`  POST /api/scan      { "repo": "owner/name", "branch": "main" }`);
+    console.log(`  POST /workflow/analyze   { "year": 2025 }`);
+    console.log(`  POST /workflow/scan      { "repo": "owner/name", "branch": "main" }`);
     console.log(`  GET  /healthz`);
   });
 

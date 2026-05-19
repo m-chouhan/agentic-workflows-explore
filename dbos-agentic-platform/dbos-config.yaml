@@ -1,4 +1,4 @@
-# DBOS configuration — PoC #1
+# DBOS configuration
 # Connection string is read from PGCONNSTR env var (see .env.example).
 name: dbos-agentic-platform
 
@@ -13,7 +13,7 @@ database:
   port: ${PGPORT:-5432}
   username: ${PGUSER:-dbos}
   password: ${PGPASSWORD:-dbos}
-  app_db_name: ${PGDATABASE:-dbos_sales}
+  app_db_name: ${PGDATABASE:-dbos_platform}
   ssl: false
 
 telemetry:

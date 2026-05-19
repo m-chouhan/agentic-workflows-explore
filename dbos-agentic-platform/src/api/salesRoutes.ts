@@ -11,7 +11,7 @@ const AnalyzeRequestSchema = z.object({
 export function buildSalesRouter(client: DBOSClient): Router {
   const router = Router();
 
-  router.post("/api/analyze", async (req: Request, res: Response) => {
+  router.post("/analyze", async (req: Request, res: Response) => {
     const parsed = AnalyzeRequestSchema.safeParse(req.body);
     if (!parsed.success) {
       res.status(400).json({ error: "invalid_request", details: parsed.error.format() });
@@ -26,13 +26,13 @@ export function buildSalesRouter(client: DBOSClient): Router {
         { queueName: ANALYSIS_QUEUE_NAME, workflowName: ANALYZE_YEAR_WORKFLOW, workflowID: workflowId },
         year,
       );
-      res.status(202).json({ workflowId, status: "ENQUEUED", pollUrl: `/api/analyze/${workflowId}` });
+      res.status(202).json({ workflowId, status: "ENQUEUED", pollUrl: `/workflow/analyze/${workflowId}` });
     } catch (err) {
       res.status(500).json({ error: "enqueue_failed", message: (err as Error).message });
     }
   });
 
-  router.get("/api/analyze/:id", async (req: Request, res: Response) => {
+  router.get("/analyze/:id", async (req: Request, res: Response) => {
     const { id } = req.params;
     try {
       const wf = await client.getWorkflow(id);
@@ -45,7 +45,7 @@ export function buildSalesRouter(client: DBOSClient): Router {
     }
   });
 
-  router.get("/api/insights/:year", async (req: Request, res: Response) => {
+  router.get("/insights/:year", async (req: Request, res: Response) => {
     const year = parseInt(req.params.year, 10);
     if (isNaN(year)) { res.status(400).json({ error: "invalid_year" }); return; }
 

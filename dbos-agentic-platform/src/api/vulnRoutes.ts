@@ -12,7 +12,7 @@ const ScanRequestSchema = z.object({
 export function buildVulnRouter(client: DBOSClient): Router {
   const router = Router();
 
-  router.post("/api/scan", async (req: Request, res: Response) => {
+  router.post("/scan", async (req: Request, res: Response) => {
     const parsed = ScanRequestSchema.safeParse(req.body);
     if (!parsed.success) {
       res.status(400).json({ error: "invalid_request", details: parsed.error.format() });
@@ -27,13 +27,13 @@ export function buildVulnRouter(client: DBOSClient): Router {
         { queueName: VULN_QUEUE_NAME, workflowName: SCAN_AND_FIX_WORKFLOW, workflowID: workflowId },
         repo, branch,
       );
-      res.status(202).json({ workflowId, status: "ENQUEUED", pollUrl: `/api/scan/${workflowId}` });
+      res.status(202).json({ workflowId, status: "ENQUEUED", pollUrl: `/workflow/scan/${workflowId}` });
     } catch (err) {
       res.status(500).json({ error: "enqueue_failed", message: (err as Error).message });
     }
   });
 
-  router.get("/api/scan/:id", async (req: Request, res: Response) => {
+  router.get("/scan/:id", async (req: Request, res: Response) => {
     const { id } = req.params;
     try {
       const wf = await client.getWorkflow(id);
@@ -46,7 +46,7 @@ export function buildVulnRouter(client: DBOSClient): Router {
     }
   });
 
-  router.get("/api/findings/:repo", async (req: Request, res: Response) => {
+  router.get("/findings/:repo", async (req: Request, res: Response) => {
     const repo = req.params.repo;
     if (!repo) { res.status(400).json({ error: "missing_repo" }); return; }
 
