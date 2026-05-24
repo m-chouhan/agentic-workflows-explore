@@ -39,7 +39,7 @@ jobs:
 
       - name: Build Docker image
         working-directory: dbos-agentic-platform
-        run: docker compose -f docker-compose.prod.yml build
+        run: docker build -t agentic-platform:latest .
 
       - name: Deploy to server
         working-directory: dbos-agentic-platform
