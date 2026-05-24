@@ -1,0 +1,58 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: agentic-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${PGUSER:-dbos}
+      POSTGRES_PASSWORD: ${PGPASSWORD:-dbos}
+      POSTGRES_DB: ${PGDATABASE:-dbos_platform}
+    volumes:
+      - agentic_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${PGUSER:-dbos} -d ${PGDATABASE:-dbos_platform}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - agentic-net
+
+  worker:
+    build: .
+    image: agentic-platform:latest
+    platform: linux/amd64
+    command: node dist/src/worker.js
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file: .env
+    environment:
+      PGHOST: postgres
+      DBOS_EXECUTOR_ID: worker-1
+    networks:
+      - agentic-net
+
+  app-server:
+    build: .
+    image: agentic-platform:latest
+    platform: linux/amd64
+    command: node dist/src/server.js
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "3002:3000"
+    env_file: .env
+    environment:
+      PGHOST: postgres
+      PORT: 3000
+    networks:
+      - agentic-net
+
+networks:
+  agentic-net:
+
+volumes:
+  agentic_pg_data:

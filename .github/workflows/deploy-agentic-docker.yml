@@ -1,0 +1,71 @@
+name: Deploy Agentic Platform to Contabo
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - dbos-agentic-platform/src/**
+      - dbos-agentic-platform/Dockerfile
+      - dbos-agentic-platform/docker-compose.prod.yml
+      - dbos-agentic-platform/package*.json
+      - dbos-agentic-platform/tsconfig.json
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Build image with Docker Compose
+        working-directory: dbos-agentic-platform
+        run: |
+          docker compose -f docker-compose.prod.yml build
+
+      - name: Package image and compose file
+        working-directory: dbos-agentic-platform
+        run: |
+          docker save agentic-platform:latest -o agentic-platform.tar
+          tar -czf deploy.tar.gz agentic-platform.tar docker-compose.prod.yml
+
+      - name: Configure SSH
+        uses: webfactory/ssh-agent@v0.5.3
+        with:
+          ssh-private-key: ${{ secrets.CLOUD_SSH_KEY }}
+
+      - name: Transfer package to server
+        working-directory: dbos-agentic-platform
+        run: |
+          scp -o StrictHostKeyChecking=no deploy.tar.gz root@${{ secrets.CLOUD_IP }}:~/
+
+      - name: Write .env and deploy on server
+        run: |
+          ssh -o StrictHostKeyChecking=no root@${{ secrets.CLOUD_IP }} "cat > /opt/agentic-platform/.env" << EOF
+          PORT=3000
+          PGHOST=postgres
+          PGPORT=5432
+          PGUSER=dbos
+          PGPASSWORD=dbos
+          PGDATABASE=dbos_platform
+          GOOGLE_GENERATIVE_AI_API_KEY=${{ secrets.GOOGLE_GENERATIVE_AI_API_KEY }}
+          GOOGLE_MODEL=${{ secrets.GOOGLE_MODEL || 'gemini-2.5-flash' }}
+          GITHUB_TOKEN=${{ secrets.GITHUB_TOKEN }}
+          EOF
+
+          ssh -o StrictHostKeyChecking=no root@${{ secrets.CLOUD_IP }} << 'ENDSSH'
+            set -e
+            mkdir -p /opt/agentic-platform
+            cd ~
+            tar -xzf deploy.tar.gz
+            docker load -i agentic-platform.tar
+            cp docker-compose.prod.yml /opt/agentic-platform/docker-compose.prod.yml
+            cd /opt/agentic-platform
+            docker compose -f docker-compose.prod.yml down 2>/dev/null || true
+            docker compose -f docker-compose.prod.yml up -d
+            docker image prune -f
+            echo "=== Deployment complete ==="
+            docker compose -f docker-compose.prod.yml ps
+          ENDSSH

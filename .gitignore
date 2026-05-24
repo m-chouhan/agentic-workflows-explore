@@ -1,1 +1,9 @@
 dbos-demo-apps/
+
+# Logs
+**/logs.txt
+logs.txt
+
+# Docker artefacts
+*.tar
+deploy.tar.gz

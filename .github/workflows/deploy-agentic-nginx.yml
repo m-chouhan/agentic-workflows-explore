@@ -1,0 +1,33 @@
+name: Deploy Agentic Platform Nginx Config
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - dbos-agentic-platform/cloud/nginx/**
+
+jobs:
+  deploy-nginx:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Configure SSH
+        uses: webfactory/ssh-agent@v0.5.3
+        with:
+          ssh-private-key: ${{ secrets.CLOUD_SSH_KEY }}
+
+      - name: Deploy Nginx config
+        run: |
+          scp -o StrictHostKeyChecking=no \
+            dbos-agentic-platform/cloud/nginx/*.conf \
+            root@${{ secrets.CLOUD_IP }}:/etc/nginx/sites-available/
+
+          ssh -o StrictHostKeyChecking=no root@${{ secrets.CLOUD_IP }} << 'EOF'
+            ln -sf /etc/nginx/sites-available/agentic-platform.conf /etc/nginx/sites-enabled/
+            nginx -t && systemctl reload nginx || exit 1
+          EOF

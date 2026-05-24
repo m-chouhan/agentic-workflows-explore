@@ -31,8 +31,9 @@ async function main(): Promise<void> {
   const existing = await query<{ n: string }>("SELECT COUNT(*) AS n FROM sales");
   const count = Number(existing[0].n);
   if (count > 0) {
-    console.log(`sales table already has ${count} rows; truncating and reseeding.`);
-    await query("DELETE FROM sales");
+    console.log(`sales table already has ${count} rows; skipping seed.`);
+    await closePool();
+    return;
   }
 
   const today = new Date();

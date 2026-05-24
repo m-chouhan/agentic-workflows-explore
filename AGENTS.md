@@ -119,3 +119,54 @@ Two workflows: `analyzeYear` (sales analysis) + `scanAndFix` (vulnerability scan
 - When `.env` is missing a key and the process is already running, the fastest fix is to append the key to `.env` and restart the process — no code changes needed.
 - Check `node_modules/<package>/package.json` for `"version"` to quickly compare installed vs expected SDK versions before debugging API shape mismatches.
 - Use `npx tsc --noEmit` after every non-trivial code change to catch type errors before runtime.
+
+---
+
+## Deployment — Contabo VPS (vmi3308702)
+
+**Server:** `62.171.183.99` · Ubuntu 24.04 · Docker 29 · Docker Compose v5  
+**SSH key:** `~/.ssh/contabo_agentic` (alias: `contabo-agentic` in `~/.ssh/config`)  
+**App directory on server:** `/opt/agentic-platform/`  
+**App server port:** `3002` (mapped to container port 3000)
+
+### Pattern (mirrors `my-portfolio`)
+- `docker-compose.prod.yml` — production compose with `platform: linux/amd64`, `env_file: .env`
+- `cloud/server-setup.sh` — one-time Nginx/Certbot/UFW setup
+- `cloud/nginx/agentic-platform.conf` — proxy `agents.mchouhan.co.in` → `localhost:3002`
+- `.github/workflows/deploy-agentic-docker.yml` — CI/CD: build → tar → scp → ssh load & up
+- `.github/workflows/deploy-agentic-nginx.yml` — deploy nginx config changes
+
+### GitHub Secrets required (repo: `m-chouhan/agentic-workflows-explore`)
+| Secret | Value |
+|---|---|
+| `CLOUD_SSH_KEY` | contents of `~/.ssh/contabo_agentic` (private key) |
+| `CLOUD_IP` | `62.171.183.99` |
+| `GOOGLE_GENERATIVE_AI_API_KEY` | your Gemini API key |
+| `GOOGLE_MODEL` | `gemini-2.5-flash` (optional, has default) |
+| `GITHUB_TOKEN` | GitHub PAT for PR creation (optional) |
+
+### One-time server setup
+```bash
+# 1. Run setup script
+scp dbos-agentic-platform/cloud/server-setup.sh root@62.171.183.99:/tmp/
+ssh contabo-agentic "bash /tmp/server-setup.sh"
+
+# 2. Deploy nginx config
+scp dbos-agentic-platform/cloud/nginx/agentic-platform.conf root@62.171.183.99:/etc/nginx/sites-available/
+ssh contabo-agentic "ln -sf /etc/nginx/sites-available/agentic-platform.conf /etc/nginx/sites-enabled/ && nginx -t && systemctl reload nginx"
+```
+
+### Deploy manually (without CI)
+```bash
+cd dbos-agentic-platform
+docker compose -f docker-compose.prod.yml build
+docker save agentic-platform:latest -o agentic-platform.tar
+tar -czf deploy.tar.gz agentic-platform.tar docker-compose.prod.yml
+scp deploy.tar.gz root@62.171.183.99:~/
+ssh contabo-agentic "cd ~ && tar -xzf deploy.tar.gz && docker load -i agentic-platform.tar && cp docker-compose.prod.yml /opt/agentic-platform/ && cd /opt/agentic-platform && docker compose -f docker-compose.prod.yml up -d"
+```
+
+### Health check
+```bash
+curl http://62.171.183.99:3002/healthz
+```
