@@ -17,15 +17,32 @@ services:
     networks:
       - agentic-net
 
-  worker:
-    build: .
+  db-seed:
     image: agentic-platform:latest
     platform: linux/amd64
+    container_name: agentic-db-seed
+    command: node dist/scripts/seed-sales.js
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file: .env
+    environment:
+      PGHOST: postgres
+    networks:
+      - agentic-net
+
+  worker:
+    image: agentic-platform:latest
+    platform: linux/amd64
+    container_name: agentic-worker
     command: node dist/src/worker.js
     restart: unless-stopped
     depends_on:
       postgres:
         condition: service_healthy
+      db-seed:
+        condition: service_completed_successfully
     env_file: .env
     environment:
       PGHOST: postgres
@@ -34,14 +51,16 @@ services:
       - agentic-net
 
   app-server:
-    build: .
     image: agentic-platform:latest
     platform: linux/amd64
+    container_name: agentic-app-server
     command: node dist/src/server.js
     restart: unless-stopped
     depends_on:
       postgres:
         condition: service_healthy
+      db-seed:
+        condition: service_completed_successfully
     ports:
       - "3002:3000"
     env_file: .env
