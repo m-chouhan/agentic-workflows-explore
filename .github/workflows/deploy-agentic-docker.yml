@@ -13,7 +13,7 @@ on:
       - dbos-agentic-platform/package*.json
       - dbos-agentic-platform/tsconfig.json
       - dbos-agentic-platform/.env.production
-      - dbos-agentic-platform/cloud/**
+      - cloud/box-setup.sh
 
 # Required secrets: CLOUD_SSH_KEY, CLOUD_IP, GOOGLE_GENERATIVE_AI_API_KEY
 
@@ -33,7 +33,7 @@ jobs:
       - name: Ensure box is ready
         run: |
           scp -o StrictHostKeyChecking=no \
-            dbos-agentic-platform/cloud/box-setup.sh \
+            cloud/box-setup.sh \
             root@${{ secrets.CLOUD_IP }}:~/box-setup.sh
           ssh -o StrictHostKeyChecking=no root@${{ secrets.CLOUD_IP }} "bash ~/box-setup.sh"
 
