@@ -10,7 +10,7 @@ Deep learnings, framework comparisons, and validated research for the DBOS + age
 
 | File | Topic |
 |---|---|
-| _(add files here as they are created)_ | |
+| `contabo-deployment-runbook_20260526.md` | Full deploy + verify runbook for Contabo VPS — DNS, nginx, Certbot, CI/CD, test curl commands, troubleshooting |
 
 ## What goes here vs AGENTS.md
 
