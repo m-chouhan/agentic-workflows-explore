@@ -13,9 +13,9 @@ on:
       - dbos-agentic-platform/package*.json
       - dbos-agentic-platform/tsconfig.json
       - dbos-agentic-platform/.env.production
-      - dbos-agentic-platform/cloud/**
+      - cloud/box-setup.sh
 
-# Required secrets: CLOUD_SSH_KEY, CLOUD_IP
+# Required secrets: CLOUD_SSH_KEY, CLOUD_IP, GOOGLE_GENERATIVE_AI_API_KEY
 
 jobs:
   deploy:
@@ -33,7 +33,7 @@ jobs:
       - name: Ensure box is ready
         run: |
           scp -o StrictHostKeyChecking=no \
-            dbos-agentic-platform/cloud/box-setup.sh \
+            cloud/box-setup.sh \
             root@${{ secrets.CLOUD_IP }}:~/box-setup.sh
           ssh -o StrictHostKeyChecking=no root@${{ secrets.CLOUD_IP }} "bash ~/box-setup.sh"
 
@@ -46,6 +46,7 @@ jobs:
         run: |
           docker save agentic-platform:latest -o agentic-platform.tar
           tar -czf deploy.tar.gz agentic-platform.tar docker-compose.prod.yml
+          echo "GOOGLE_GENERATIVE_AI_API_KEY=${{ secrets.GOOGLE_GENERATIVE_AI_API_KEY }}" >> .env.production
           scp -o StrictHostKeyChecking=no \
             deploy.tar.gz \
             .env.production \
