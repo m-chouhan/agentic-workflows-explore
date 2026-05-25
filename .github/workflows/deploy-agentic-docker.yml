@@ -15,7 +15,7 @@ on:
       - dbos-agentic-platform/.env.production
       - dbos-agentic-platform/cloud/**
 
-# Required secrets: CLOUD_SSH_KEY, CLOUD_IP
+# Required secrets: CLOUD_SSH_KEY, CLOUD_IP, GOOGLE_GENERATIVE_AI_API_KEY
 
 jobs:
   deploy:
@@ -46,6 +46,7 @@ jobs:
         run: |
           docker save agentic-platform:latest -o agentic-platform.tar
           tar -czf deploy.tar.gz agentic-platform.tar docker-compose.prod.yml
+          echo "GOOGLE_GENERATIVE_AI_API_KEY=${{ secrets.GOOGLE_GENERATIVE_AI_API_KEY }}" >> .env.production
           scp -o StrictHostKeyChecking=no \
             deploy.tar.gz \
             .env.production \
