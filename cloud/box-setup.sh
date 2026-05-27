@@ -50,6 +50,6 @@ if command -v ufw &> /dev/null; then
     echo "  ports 22/80/443/3002 open"
 fi
 
-mkdir -p /opt/agentic-platform /etc/nginx/sites-available /etc/nginx/sites-enabled
+mkdir -p /opt/agentic-platform /opt/n8n-risk-agent /etc/nginx/sites-available /etc/nginx/sites-enabled
 
 echo "=== Box Setup complete ==="

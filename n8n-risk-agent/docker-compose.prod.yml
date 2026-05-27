@@ -1,0 +1,82 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    platform: linux/amd64
+    container_name: n8n-risk-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-riskagent}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-risk_factor}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./db/init-n8n-db.sql:/docker-entrypoint-initdb.d/00-n8n-db.sql
+      - ./db/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
+      - ./db/seed.sql:/docker-entrypoint-initdb.d/02-seed.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-riskagent} -d ${POSTGRES_DB:-risk_factor}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - n8n-net
+
+  n8n:
+    # Pin to a specific version — check https://hub.docker.com/r/n8nio/n8n/tags for latest stable
+    image: n8nio/n8n:1.88.0
+    platform: linux/amd64
+    container_name: n8n-risk-agent
+    restart: unless-stopped
+    ports:
+      # Bind to localhost only — Nginx proxies externally via HTTPS
+      - "127.0.0.1:5679:5678"
+    environment:
+      - N8N_HOST=${N8N_HOST}
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=https
+      - WEBHOOK_URL=${WEBHOOK_URL}
+
+      - DB_TYPE=postgresdb
+      - DB_POSTGRESDB_HOST=postgres
+      - DB_POSTGRESDB_PORT=5432
+      - DB_POSTGRESDB_DATABASE=n8n_state
+      - DB_POSTGRESDB_USER=${POSTGRES_USER:-riskagent}
+      - DB_POSTGRESDB_PASSWORD=${POSTGRES_PASSWORD}
+
+      - GENERIC_TIMEZONE=${TIMEZONE:-Asia/Kolkata}
+      - TZ=${TIMEZONE:-Asia/Kolkata}
+
+      - N8N_RUNNERS_ENABLED=true
+
+      # Basic auth — required in production
+      - N8N_BASIC_AUTH_ACTIVE=true
+      - N8N_BASIC_AUTH_USER=${N8N_BASIC_AUTH_USER}
+      - N8N_BASIC_AUTH_PASSWORD=${N8N_BASIC_AUTH_PASSWORD}
+
+      # Must be a 32+ character random string — generate with: openssl rand -hex 20
+      - N8N_ENCRYPTION_KEY=${N8N_ENCRYPTION_KEY}
+
+      # API keys — used as n8n credential env vars
+      - FINNHUB_API_KEY=${FINNHUB_API_KEY}
+      - GOOGLE_GENERATIVE_AI_API_KEY=${GOOGLE_GENERATIVE_AI_API_KEY}
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}
+
+      # App DB connection for Postgres workflow nodes
+      - APP_DB_HOST=postgres
+      - APP_DB_PORT=5432
+      - APP_DB_NAME=${POSTGRES_DB:-risk_factor}
+      - APP_DB_USER=${POSTGRES_USER:-riskagent}
+      - APP_DB_PASSWORD=${POSTGRES_PASSWORD}
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - n8n-net
+
+networks:
+  n8n-net:
+
+volumes:
+  postgres_data:
