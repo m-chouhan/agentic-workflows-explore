@@ -4,6 +4,12 @@ set -e
 
 echo "=== Box Setup ==="
 
+# Wait for any background apt/dpkg process to finish (unattended-upgrades, etc.)
+echo "Waiting for apt lock..."
+systemctl stop unattended-upgrades 2>/dev/null || true
+while lsof /var/lib/apt/lists/lock /var/lib/dpkg/lock-frontend 2>/dev/null | grep -q apt; do
+    sleep 3
+done
 apt-get update -q
 
 echo "[1/7] Docker..."
