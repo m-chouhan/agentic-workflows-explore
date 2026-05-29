@@ -9,7 +9,6 @@ on:
       - n8n-risk-agent/docker-compose.prod.yml
       - n8n-risk-agent/db/**
       - cloud/nginx/n8n-risk-agent.conf
-      - cloud/box-setup.sh
 
 # Required secrets: CLOUD_SSH_KEY, CLOUD_IP
 # Required secrets (n8n-specific):

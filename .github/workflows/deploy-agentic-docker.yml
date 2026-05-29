@@ -13,7 +13,6 @@ on:
       - dbos-agentic-platform/package*.json
       - dbos-agentic-platform/tsconfig.json
       - dbos-agentic-platform/.env.production
-      - cloud/box-setup.sh
 
 # Required secrets: CLOUD_SSH_KEY, CLOUD_IP, GOOGLE_GENERATIVE_AI_API_KEY
 
