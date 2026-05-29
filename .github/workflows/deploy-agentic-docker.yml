@@ -69,8 +69,13 @@ jobs:
         run: |
           for i in $(seq 1 12); do
             echo "Attempt $i/12..."
-            curl -sf http://${{ secrets.CLOUD_IP }}:3002/healthz && echo "Health check passed" && exit 0
+            if curl -sf --max-time 10 http://${{ secrets.CLOUD_IP }}:3002/healthz; then
+              echo "Health check passed"
+              exit 0
+            fi
             sleep 10
           done
           echo "Health check failed after 2 minutes"
+          ssh -o StrictHostKeyChecking=no root@${{ secrets.CLOUD_IP }} \
+            "cd /opt/agentic-platform && docker compose -f docker-compose.prod.yml ps && docker compose -f docker-compose.prod.yml logs --tail 30"
           exit 1

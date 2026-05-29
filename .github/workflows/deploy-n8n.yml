@@ -36,6 +36,7 @@ jobs:
           ssh -o StrictHostKeyChecking=no root@${{ secrets.CLOUD_IP }} "bash ~/box-setup.sh"
 
       - name: Write production .env
+        # N8N_PROTOCOL=https and N8N_BASIC_AUTH_ACTIVE=true are hardcoded in docker-compose.prod.yml
         working-directory: n8n-risk-agent
         run: |
           cat > .env.production << 'EOF'
