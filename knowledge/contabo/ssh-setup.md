@@ -1,7 +1,7 @@
 # Contabo SSH Setup
 
 ## Server Details
-- **Server:** vmi3308702 (`codenscious-staging`)
+- **Server:** vmi3308702
 - **IP:** `62.171.183.99`
 - **OS:** Ubuntu 24.04.4 LTS
 - **Default user:** `root`
@@ -23,28 +23,70 @@ Connect with:
 ssh contabo-agentic
 ```
 
-## Key Auth Setup (one-time)
+## Key Auth Setup (one-time, use rescue password if needed)
 
 ```bash
-# Copy existing key to server (enter password once)
 ssh-copy-id -i ~/.ssh/contabo_agentic.pub root@62.171.183.99
 ```
 
-## SSH Config Files on Server
+Note: `~/.ssh/contabo_agentic` is the same key as `~/.ssh/digital_ocean` — reused.
+It appears in `authorized_keys` on the server as `digital_ocean`.
 
-SSH config is loaded in layers — later files override earlier ones:
+## One-Time Hardening (run immediately after any new server provision)
 
-```
-/etc/ssh/sshd_config                        # base config
-/etc/ssh/sshd_config.d/60-cloudimg-settings.conf  # Contabo cloud-init override
-/etc/ssh/sshd_config.d/99-fix.conf          # our override (highest priority)
-```
-
-**Important:** Contabo sets `PasswordAuthentication no` by default in `60-cloudimg-settings.conf`. This is intentional (security) but locks you out if you have no SSH key.
-
-## Disable Password Auth (after key auth confirmed working)
+Ubuntu 24.04 ships with cloud-init override files in `/etc/ssh/sshd_config.d/` that
+**re-enable PasswordAuthentication and disable PubkeyAuthentication on every reboot**.
+This is the root cause of recurring SSH lockouts from brute-force bot floods.
 
 ```bash
-echo "PasswordAuthentication no" > /etc/ssh/sshd_config.d/60-cloudimg-settings.conf
+ssh contabo-agentic
+
+# 1. Wipe all conflicting cloud-init SSH override files
+rm -f /etc/ssh/sshd_config.d/60-cloudimg-settings.conf \
+      /etc/ssh/sshd_config.d/99-cloud-init.conf \
+      /etc/ssh/sshd_config.d/99-fix.conf
+
+# 2. Single authoritative file (99- prefix wins over everything)
+echo "PasswordAuthentication no
+PubkeyAuthentication yes
+PermitRootLogin prohibit-password" > /etc/ssh/sshd_config.d/99-hardening.conf
+
+# 3. Verify — should only show 99-hardening.conf with 3 correct lines
+ls /etc/ssh/sshd_config.d/
+grep -r "" /etc/ssh/sshd_config.d/
+sshd -t && echo "Config OK"
+
+# 4. Install fail2ban (auto-bans IPs after repeated failed attempts)
+apt-get update && apt-get install -y fail2ban
+systemctl enable fail2ban && systemctl start fail2ban
+
+# 5. Restart SSH to apply
 systemctl restart ssh
 ```
+
+## Post-Boot Verification
+
+```bash
+# All three must be correct
+sshd -T | grep -E "passwordauthentication|pubkeyauthentication|permitrootlogin"
+# Expected:
+#   passwordauthentication no
+#   pubkeyauthentication yes
+#   permitrootlogin prohibit-password
+
+ls /etc/ssh/sshd_config.d/
+# Expected: only 99-hardening.conf
+
+systemctl status fail2ban | grep "Active:"
+# Expected: Active: active (running)
+```
+
+## Why PasswordAuthentication Must Stay Off
+
+The server is continuously scanned by SSH bots (hundreds of attempts/min from IPs like
+45.153.34.181, 110.35.80.116, 45.227.254.170, etc.). With password auth enabled, this
+floods the SSH daemon and causes it to become unresponsive — appearing as
+"Network is unreachable" from the client side.
+
+With `PasswordAuthentication no`, bots are rejected at the crypto layer instantly,
+no daemon load, no lockouts.

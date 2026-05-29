@@ -1,99 +1,127 @@
 # Contabo Rescue Playbook
 
-Use this when SSH is broken and you can't get into the server.
+Use when SSH is broken and you can't get into the server.
 
-## When to Use
+## Symptoms
+- `ssh: connect to host X.X.X.X port 22: Network is unreachable`
 - `ssh: connect to host X.X.X.X port 22: Connection refused`
-- `Permission denied (publickey,password)`
-- Server rebooted and SSH stopped working
+- `Permission denied (publickey)`
+- Host key changed warning after rescue boot
 
-## Step 1 — Start Rescue System
+## Root Cause (Contabo-specific)
 
-1. Log into [Contabo Customer Panel](https://my.contabo.com)
-2. Go to your server → click **⋮** → **Rescue System**
-3. Enter a temporary password (e.g. `rescue123`) → **Start Rescue System** → **Confirm**
-4. Wait ~3-7 minutes for rescue to boot
+Ubuntu 24.04 cloud images ship override files in `/etc/ssh/sshd_config.d/` that
+re-enable `PasswordAuthentication yes` and disable `PubkeyAuthentication` on reboot.
+SSH bots then flood port 22, overwhelming the daemon → lockout.
 
-## Step 2 — SSH into Rescue
+The fix is `knowledge/contabo/ssh-setup.md` → One-Time Hardening section.
+
+---
+
+## Step 1 — Clear Old Host Key (local Mac)
 
 ```bash
-ssh-keygen -R <server-ip>   # clear old known_hosts entry
-ssh root@<server-ip>         # use the password you set above
+ssh-keygen -R 62.171.183.99
 ```
 
-Prompt will show `root@rescue:~#` — you're in the temporary rescue Debian, NOT your real server.
+Required whenever rescue system boots — it has different host keys.
 
-## Step 3 — Mount Your Real Disk
+## Step 2 — Start Rescue System
+
+1. Go to [Contabo panel](https://new.contabo.com/servers/instance/203308702)
+2. Click **⋮** → **Rescue System** → set a temporary password → **Start**
+3. Wait ~3–5 minutes
+
+## Step 3 — SSH into Rescue
 
 ```bash
-lsblk   # find your disk — usually sda1 (the large ~200GB partition)
+ssh root@62.171.183.99   # use the temporary rescue password
+# Prompt: root@rescue:~#
+```
+
+## Step 4 — Find Disk and Chroot
+
+```bash
+lsblk
+# Look for the large partition — usually sda1 (~199G)
 
 mount /dev/sda1 /mnt
 mount --bind /dev /mnt/dev
 mount --bind /proc /mnt/proc
 mount --bind /sys /mnt/sys
-
-chroot /mnt   # now you're operating inside your real Ubuntu
+chroot /mnt
+# Prompt still shows root@rescue:/# — that's expected
 ```
 
-## Step 4 — Fix SSH Config
+## Step 5 — Diagnose
 
 ```bash
-# Check what's broken
-grep -r "PasswordAuthentication\|PermitRootLogin" /etc/ssh/
+# Check auth log for brute force / SSH failures
+tail -50 /var/log/auth.log
 
-# Fix the Contabo cloud-init override (main culprit)
-echo "PasswordAuthentication yes" > /etc/ssh/sshd_config.d/60-cloudimg-settings.conf
+# Check SSH override files — these are the usual culprit
+ls /etc/ssh/sshd_config.d/
+grep -r "PasswordAuthentication\|PubkeyAuthentication" /etc/ssh/sshd_config.d/
 
-# Create a high-priority override file
+# Check authorized_keys is intact
+cat /root/.ssh/authorized_keys
+```
+
+## Step 6 — Fix SSH Config
+
+```bash
+# Wipe all conflicting cloud-init override files
+rm -f /etc/ssh/sshd_config.d/60-cloudimg-settings.conf \
+      /etc/ssh/sshd_config.d/99-cloud-init.conf \
+      /etc/ssh/sshd_config.d/99-fix.conf
+
+# Single authoritative hardening file
+echo "PasswordAuthentication no
+PubkeyAuthentication yes
+PermitRootLogin prohibit-password" > /etc/ssh/sshd_config.d/99-hardening.conf
+
+# Verify
+ls /etc/ssh/sshd_config.d/          # only 99-hardening.conf
+grep -r "" /etc/ssh/sshd_config.d/  # 3 correct lines
+# Note: sshd -T will show "Missing privilege separation directory" inside chroot — harmless
+```
+
+## Step 7 — Exit Chroot
+
+```bash
+exit
+```
+
+## Step 8 — Disable Rescue Mode (CRITICAL — do this before rebooting)
+
+Go to Contabo panel → instance → stop/disable rescue mode.
+If you skip this, the server boots back into rescue instead of normal OS.
+
+## Step 9 — Reboot
+
+```bash
+reboot
+```
+
+## Step 10 — Reconnect and Install fail2ban
+
+```bash
+ssh-keygen -R 62.171.183.99   # fingerprint changes again after normal boot
+ssh contabo-agentic
+
+apt-get update && apt-get install -y fail2ban
+systemctl enable fail2ban && systemctl start fail2ban
+
+# Confirm everything is correct on live system
+sshd -T | grep -E "passwordauthentication|pubkeyauthentication|permitrootlogin"
+```
+
+## ⚠️ DO NOT DO THIS (common mistakes that caused past lockouts)
+
+```bash
+# WRONG — re-enables password auth, bots will flood SSH again
 echo "PasswordAuthentication yes" > /etc/ssh/sshd_config.d/99-fix.conf
-echo "PermitRootLogin yes" >> /etc/ssh/sshd_config.d/99-fix.conf
 
-# Ensure SSH starts on boot
-systemctl enable ssh
+# WRONG — disables key auth, will lock you out completely
+echo "PubkeyAuthentication no" > /etc/ssh/sshd_config.d/99-fix.conf
 ```
-
-## Step 5 — Reset Root Password (if needed)
-
-```bash
-passwd root
-```
-
-Verify password is set (not locked):
-```bash
-grep root /etc/shadow | cut -d: -f1-2
-# Should show root:$y$... or root:$6$... (NOT root:* or root:!)
-```
-
-## Step 6 — Verify Before Rebooting
-
-```bash
-# All these should show "yes", no "no"
-grep -r "PasswordAuthentication\|PermitRootLogin" /etc/ssh/
-
-# Validate SSH config syntax
-sshd -t -f /etc/ssh/sshd_config
-# "Missing privilege separation directory" warning is harmless
-
-# SSH symlink should exist
-ls /etc/systemd/system/multi-user.target.wants/ssh.service
-```
-
-## Step 7 — Exit and Reboot
-
-```bash
-exit   # exit chroot
-```
-
-Contabo panel → **🔄 restart** to exit rescue mode and boot real Ubuntu.
-
-## Step 8 — Reconnect
-
-```bash
-ssh-keygen -R <server-ip>   # clear known_hosts (fingerprint changes after rescue)
-ssh root@<server-ip>         # or use your SSH alias
-```
-
-## Root Cause (Contabo-specific)
-
-Contabo provisions servers with `PasswordAuthentication no` in `/etc/ssh/sshd_config.d/60-cloudimg-settings.conf`. If you restart without SSH keys set up, you get locked out. Always set up SSH key auth after first login.
