@@ -58,10 +58,9 @@ fi
 
 echo "[6/7] SSH hardening..."
 # Ubuntu 24.04 cloud-init ships override files that re-enable PasswordAuthentication
-# and disable PubkeyAuthentication on every reboot — wipe them all, use one file.
-rm -f /etc/ssh/sshd_config.d/60-cloudimg-settings.conf \
-      /etc/ssh/sshd_config.d/99-cloud-init.conf \
-      /etc/ssh/sshd_config.d/99-fix.conf
+# and disable PubkeyAuthentication on every reboot. Wipe everything in sshd_config.d/
+# (names vary per box/image) and replace with a single authoritative file.
+rm -f /etc/ssh/sshd_config.d/*.conf
 echo "PasswordAuthentication no
 PubkeyAuthentication yes
 PermitRootLogin prohibit-password" > /etc/ssh/sshd_config.d/99-hardening.conf

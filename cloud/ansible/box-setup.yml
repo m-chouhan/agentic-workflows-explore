@@ -1,0 +1,84 @@
+# Box bootstrap — declarative equivalent of cloud/box-setup.sh
+# Run from your laptop:  ansible-playbook -i 62.171.183.99, cloud/ansible/box-setup.yml
+# (the trailing comma after the IP is required — it tells Ansible it's an inline host list)
+---
+- name: Bootstrap Contabo box
+  hosts: all
+  become: true            # run tasks as root via sudo
+  vars:
+    open_ports: [22, 80, 443, 3002]
+    app_dirs:
+      - /opt/agentic-platform
+      - /opt/n8n-risk-agent
+
+  tasks:
+    - name: Install base packages
+      ansible.builtin.apt:
+        name:
+          - docker.io
+          - docker-compose-v2
+          - nginx
+          - certbot
+          - python3-certbot-nginx
+          - fail2ban
+          - ufw
+        state: present
+        update_cache: true
+        cache_valid_time: 3600   # skip apt update if done in last hour
+      register: apt_result
+      retries: 5                 # handles the apt-lock race automatically
+      delay: 10
+      until: apt_result is succeeded
+
+    - name: Enable and start services
+      ansible.builtin.systemd:
+        name: "{{ item }}"
+        enabled: true
+        state: started
+      loop:
+        - docker
+        - nginx
+        - fail2ban
+
+    - name: Open firewall ports
+      community.general.ufw:
+        rule: allow
+        port: "{{ item }}"
+        proto: tcp
+      loop: "{{ open_ports }}"
+
+    - name: Enable firewall
+      community.general.ufw:
+        state: enabled
+
+    # SSH hardening — the part that broke tonight.
+    # Wipe all cloud-init overrides, drop one authoritative file.
+    - name: Remove conflicting sshd_config.d overrides
+      ansible.builtin.shell: rm -f /etc/ssh/sshd_config.d/*.conf
+      args:
+        removes: /etc/ssh/sshd_config.d/  # only runs if dir exists
+
+    - name: Write SSH hardening config
+      ansible.builtin.copy:
+        dest: /etc/ssh/sshd_config.d/99-hardening.conf
+        content: |
+          PasswordAuthentication no
+          PubkeyAuthentication yes
+          PermitRootLogin prohibit-password
+        owner: root
+        mode: "0644"
+        validate: sshd -t -f %s     # refuses to apply a broken config
+      notify: restart ssh           # only restarts SSH if the file changed
+
+    - name: Create app directories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: "0755"
+      loop: "{{ app_dirs }}"
+
+  handlers:
+    - name: restart ssh
+      ansible.builtin.systemd:
+        name: ssh
+        state: restarted
