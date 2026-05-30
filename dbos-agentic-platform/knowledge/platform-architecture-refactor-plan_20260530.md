@@ -46,7 +46,7 @@ single workflow (`scanAndFix`) — the cheapest possible moment to restructure.
 | 4 | n8n hybrid invocation | **Deferred** — don't contort the design now; workflows stay HTTP/webhook-triggerable so n8n can drive them later if needed |
 | 5 | Reusable steps library | **No** — keep steps private to each workflow until a second workflow genuinely needs one (avoid premature abstraction) |
 | 6 | Shared layer name | **`platform/`** |
-| 7 | DB schema ownership | **Shared `schema.sql` for now**; split into per-workflow fragments in a later iteration |
+| 7 | DB schema ownership | **Per-workflow** — each module owns its `schema.sql` and declares `schemaPath`; `platform/db.ts` applies all declared schemas. (Originally deferred as "shared for now"; completed 2026-05-30.) |
 
 ## "Shared supporting layer" defined
 
@@ -78,10 +78,13 @@ src/
     github.ts            # from github/octokit.ts (generic client + parseRepo)
     llm.ts               # getModel() + AI SDK model factory
     dbos.ts              # DBOS bootstrap extracted from worker.ts
-  schema.sql             # shared schema (kept monolithic for now — decision #7)
   server.ts              # thin: loops workflows/index.ts, mounts each routes.ts
   worker.ts              # thin: imports registry, registers workflows + queues
 ```
+
+Each workflow module ships its own `schema.sql` (declared via `schemaPath`). The build copies
+`.sql` assets into `dist/` (`tsc && copyfiles -u 1 "src/**/*.sql" dist/src`), so the Dockerfile
+stays agnostic — it just copies `dist/`.
 
 ### File mapping (current → target)
 

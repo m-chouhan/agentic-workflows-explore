@@ -5,7 +5,7 @@
   "description": "DBOS-orchestrated agentic workflows: vulnerability scan-and-fix pipeline",
   "type": "commonjs",
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && copyfiles -u 1 \"src/**/*.sql\" dist/src",
     "dev:worker": "tsx watch src/worker.ts",
     "dev:server": "tsx watch src/server.ts",
     "start:worker": "node dist/src/worker.js",
@@ -16,17 +16,18 @@
     "@ai-sdk/google": "^3.0.71",
     "@ai-sdk/openai": "^3.0.63",
     "@dbos-inc/dbos-sdk": "^4.17.6",
+    "@octokit/rest": "^21.1.1",
     "ai": "^6.0.177",
     "dotenv": "^17.4.2",
     "express": "^4.21.0",
-    "@octokit/rest": "^21.1.1",
     "pg": "^8.13.3",
     "zod": "^3.23.8"
   },
   "devDependencies": {
     "@types/express": "^4.17.21",
-    "@types/pg": "^8.11.6",
     "@types/node": "^20.14.10",
+    "@types/pg": "^8.11.6",
+    "copyfiles": "^2.4.1",
     "tsx": "^4.19.0",
     "typescript": "^5.5.4"
   }

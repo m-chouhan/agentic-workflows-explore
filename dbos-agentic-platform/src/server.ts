@@ -9,7 +9,7 @@ import { workflowModules } from "./workflows";
 const PORT = parseInt(process.env.PORT ?? "3000", 10);
 
 async function main(): Promise<void> {
-  await ensureSchema();
+  await ensureSchema(workflowModules.map((m) => m.schemaPath));
 
   const client = await createDbosClient();
   console.log("[server] DBOSClient connected");

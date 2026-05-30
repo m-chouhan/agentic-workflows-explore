@@ -1,11 +1,4 @@
--- Business-data schema (Postgres)
--- Business tables share the same database as DBOS system state.
--- NOTE: kept as a single shared file for now; will split into per-workflow
--- fragments in a later iteration (see knowledge/platform-architecture-refactor-plan).
-
--- ═══════════════════════════════════════════════════════════════════
--- Vulnerability scan-and-fix tables
--- ═══════════════════════════════════════════════════════════════════
+-- scan-and-fix workflow tables
 
 CREATE TABLE IF NOT EXISTS scan_results (
   id              SERIAL PRIMARY KEY,
