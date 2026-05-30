@@ -133,7 +133,7 @@ Two workflows: `analyzeYear` (sales analysis) + `scanAndFix` (vulnerability scan
 - `docker-compose.prod.yml` — production compose with `platform: linux/amd64`, `env_file: .env`
 - `cloud/server-setup.sh` — one-time Nginx/Certbot/UFW setup
 - `cloud/nginx/agents-mchouhan.conf` — proxy `agents.mchouhan.co.in` → `localhost:3002`
-- `.github/workflows/deploy-agentic-docker.yml` — CI/CD: build → tar → scp → ssh load & up
+- `.github/workflows/deploy-dbos-platform.yml` — CI/CD: build → tar → scp → ssh load & up
 - `.github/workflows/deploy-nginx.yml` — deploy all nginx configs in `cloud/nginx/**`
 
 ### GitHub Secrets required (repo: `m-chouhan/agentic-workflows-explore`)

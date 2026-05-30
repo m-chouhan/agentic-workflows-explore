@@ -70,7 +70,7 @@ Auto-renewal is scheduled via systemd timer — verify: `systemctl list-timers |
 
 | Workflow | Trigger | What it does |
 |---|---|---|
-| `deploy-agentic-docker.yml` | push to `main` touching `dbos-agentic-platform/src/**`, `Dockerfile`, `docker-compose.prod.yml`, `cloud/box-setup.sh` | Runs box-setup.sh, builds image, deploys to Contabo, health checks |
+| `deploy-dbos-platform.yml` | push to `main` touching `dbos-agentic-platform/src/**`, `Dockerfile`, `docker-compose.prod.yml`, `cloud/box-setup.sh` | Runs box-setup.sh, builds image, deploys to Contabo, health checks |
 | `deploy-nginx.yml` | push to `main` touching `cloud/nginx/**` | SCPs all configs, symlinks, reloads nginx |
 
 **GitHub Secrets required** (`m-chouhan/agentic-workflows-explore`):
