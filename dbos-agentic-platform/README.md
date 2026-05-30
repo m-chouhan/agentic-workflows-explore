@@ -120,12 +120,11 @@ dbos-agentic-platform/
 │   └── workflows/
 │       ├── index.ts              # registry: lists every workflow module
 │       └── scan-and-fix/         # ⭐ a workflow module (vertical slice)
-│           ├── workflow.ts       # orchestration only (scan → policy → triage → persist)
+│           ├── index.ts          # workflow orchestration + WorkflowModule descriptor
 │           ├── steps/            # scan · triage · generateFix · createPr · persist
 │           ├── schema.sql        # tables owned by this workflow
 │           ├── schemas.ts        # Zod schemas for this workflow
 │           ├── routes.ts         # /workflow/scan, /workflow/findings
 │           ├── constants.ts      # workflow + queue names
-│           ├── index.ts          # module descriptor (WorkflowModule)
 │           └── README.md         # flow, steps, API, persistence
 ```

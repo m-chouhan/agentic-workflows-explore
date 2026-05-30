@@ -7,5 +7,5 @@ export interface WorkflowModule {
   queueName: string;
   schemaPath: string;   // absolute path to this workflow's schema.sql (use path.join(__dirname, "schema.sql"))
   buildRouter: (client: DBOSClient) => Router;
-  register: () => void; // side-effect import that registers the workflow with DBOS (worker only)
+  register: () => void; // called by worker before DBOS.launch() to ensure workflow is registered
 }
