@@ -8,7 +8,6 @@
 #   postgres     — PostgreSQL 16 (port 5432)
 #   worker       — DBOS durable workflow executor (applies schema on boot)
 #   app-server   — Express API server (port 3002)
-#   tools-ui     — React frontend via nginx (port 3003)  ← open this in browser
 
 services:
   # ── Database ────────────────────────────────────────────────────────────────
@@ -83,21 +82,6 @@ services:
       interval: 10s
       timeout: 5s
       retries: 6
-
-  # ── React UI (nginx + proxy to app-server) ───────────────────────────────────
-  tools-ui:
-    build:
-      context: ./tools-ui
-      dockerfile: Dockerfile
-    container_name: local-tools-ui
-    restart: unless-stopped
-    depends_on:
-      app-server:
-        condition: service_healthy
-    ports:
-      - "3003:80"
-    networks:
-      - local-net
 
 networks:
   local-net:

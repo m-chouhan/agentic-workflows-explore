@@ -64,8 +64,7 @@ printf '\033[1;32m[start]\033[0m Starting stack (this may take a few minutes on 
 docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" up $BUILD_FLAG -d
 
 printf '\n\033[1;32m[ready]\033[0m Stack is starting. Services:\n\n'
-printf '  \033[1;36m→ Tools UI (browser):\033[0m  http://localhost:3003\n'
-printf '  \033[1;36m→ API Server (direct):\033[0m http://localhost:3002\n'
+printf '  \033[1;36m→ API Server:\033[0m          http://localhost:3002\n'
 printf '  \033[1;36m→ API health check:\033[0m    http://localhost:3002/healthz\n'
 printf '  \033[1;36m→ PostgreSQL:\033[0m          localhost:5432\n'
 printf '\n'
