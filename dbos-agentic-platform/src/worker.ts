@@ -1,6 +1,3 @@
-// Worker — DBOS executor. Registers every workflow module and launches the
-// DBOS runtime; no HTTP server. Enqueued work arrives via shared Postgres;
-// the app server uses DBOSClient to submit it.
 import * as dotenv from "dotenv";
 dotenv.config();
 
@@ -11,9 +8,7 @@ import { workflowModules } from "./workflows";
 
 async function main(): Promise<void> {
   await ensureSchema();
-
-  // Register all workflows (+ their steps) BEFORE launching DBOS.
-  for (const m of workflowModules) m.register();
+  for (const m of workflowModules) m.register(); // must happen before DBOS.launch()
 
   await launchWorker(workflowModules.map((m) => m.queueName));
 

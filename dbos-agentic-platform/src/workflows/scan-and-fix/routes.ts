@@ -1,9 +1,6 @@
-/**
- * HTTP endpoints for the scan-and-fix workflow.
- *   POST /workflow/scan            enqueue a scan
- *   GET  /workflow/scan/:id        poll workflow status
- *   GET  /workflow/findings/:repo  latest persisted findings for a repo
- */
+// POST /workflow/scan            enqueue a scan
+// GET  /workflow/scan/:id        poll workflow status
+// GET  /workflow/findings/:repo  latest persisted findings (repo as "owner--name")
 import { Router, Request, Response } from "express";
 import { DBOSClient } from "@dbos-inc/dbos-sdk";
 import { z } from "zod";

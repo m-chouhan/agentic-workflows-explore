@@ -1,9 +1,5 @@
-/**
- * GitHub PR creation helpers — deterministic steps that use the Git Trees API
- * for atomic multi-file commits.
- *
- * Flow: getBaseSha → createBranch → createCommit (blobs + tree) → createPR → pollChecks
- */
+// Uses the Git Trees API to build an atomic multi-file commit:
+// getBaseSha → createBranch → createCommit (blobs + tree) → openPR
 import { getOctokit, parseRepo } from "../../../platform/github";
 import type { FixCandidate, PRDescription } from "../schemas";
 
@@ -14,16 +10,12 @@ export interface PRResult {
   headSha: string;
 }
 
-// ── Get the SHA of a branch tip ──────────────────────────────────────────────
-
 async function getBaseSha(fullRepo: string, branch: string): Promise<string> {
   const { owner, repo } = parseRepo(fullRepo);
   const octokit = getOctokit();
   const { data } = await octokit.git.getRef({ owner, repo, ref: `heads/${branch}` });
   return data.object.sha;
 }
-
-// ── Create a new branch ──────────────────────────────────────────────────────
 
 async function createBranch(fullRepo: string, branchName: string, baseSha: string): Promise<void> {
   const { owner, repo } = parseRepo(fullRepo);
@@ -34,8 +26,6 @@ async function createBranch(fullRepo: string, branchName: string, baseSha: strin
     sha: baseSha,
   });
 }
-
-// ── Create an atomic commit with multiple file changes via Git Trees API ────
 
 interface FileChange {
   path: string;
@@ -52,7 +42,7 @@ async function createCommit(
   const { owner, repo } = parseRepo(fullRepo);
   const octokit = getOctokit();
 
-  // Step 1: Create blobs for each file
+  // Blob-per-file → new tree → commit → update ref (Git Trees API, all files atomic)
   const blobShas = await Promise.all(
     files.map(async (f) => {
       const { data } = await octokit.git.createBlob({
@@ -64,14 +54,10 @@ async function createCommit(
     }),
   );
 
-  // Step 2: Get base tree
   const { data: baseCommit } = await octokit.git.getCommit({ owner, repo, commit_sha: parentSha });
-  const baseTreeSha = baseCommit.tree.sha;
-
-  // Step 3: Create new tree (atomic — all files in one tree)
   const { data: newTree } = await octokit.git.createTree({
     owner, repo,
-    base_tree: baseTreeSha,
+    base_tree: baseCommit.tree.sha,
     tree: blobShas.map((b) => ({
       path: b.path,
       mode: "100644" as const,
@@ -80,7 +66,6 @@ async function createCommit(
     })),
   });
 
-  // Step 4: Create commit
   const { data: newCommit } = await octokit.git.createCommit({
     owner, repo,
     message,
@@ -88,17 +73,9 @@ async function createCommit(
     parents: [parentSha],
   });
 
-  // Step 5: Update branch ref
-  await octokit.git.updateRef({
-    owner, repo,
-    ref: `heads/${branchName}`,
-    sha: newCommit.sha,
-  });
-
+  await octokit.git.updateRef({ owner, repo, ref: `heads/${branchName}`, sha: newCommit.sha });
   return newCommit.sha;
 }
-
-// ── Create a Pull Request ────────────────────────────────────────────────────
 
 async function openPR(
   fullRepo: string,
@@ -135,8 +112,6 @@ async function openPR(
   };
 }
 
-// ── Poll CI check status ─────────────────────────────────────────────────────
-
 export type CheckConclusion = "success" | "failure" | "pending" | "unknown";
 
 async function pollChecks(
@@ -171,8 +146,6 @@ async function pollChecks(
   return "pending"; // Timed out
 }
 
-// ── Public API: Create a fix PR from a FixCandidate ─────────────────────────
-
 export async function createFixPR(
   fullRepo: string,
   baseBranch: string,
@@ -180,27 +153,12 @@ export async function createFixPR(
   prDesc: PRDescription,
 ): Promise<PRResult> {
   const branchName = `fix/${fix.findingId}-${Date.now()}`;
-
-  // Step 1: Get base SHA
   const baseSha = await getBaseSha(fullRepo, baseBranch);
-
-  // Step 2: Create branch
   await createBranch(fullRepo, branchName, baseSha);
-
-  // Step 3: Prepare file changes
-  const files: FileChange[] = fix.changes.map((c) => ({
-    path: c.filePath,
-    content: c.fixedCode,
-  }));
-
-  // Step 4: Create atomic commit
+  const files: FileChange[] = fix.changes.map((c) => ({ path: c.filePath, content: c.fixedCode }));
   const commitMessage = `Security: Fix ${fix.findingId}\n\n${fix.explanation}`;
   await createCommit(fullRepo, branchName, baseSha, commitMessage, files);
-
-  // Step 5: Open draft PR
-  const prResult = await openPR(fullRepo, branchName, baseBranch, prDesc);
-
-  return prResult;
+  return openPR(fullRepo, branchName, baseBranch, prDesc);
 }
 
 export { pollChecks };

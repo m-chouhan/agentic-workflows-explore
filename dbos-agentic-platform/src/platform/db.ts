@@ -1,8 +1,3 @@
-/**
- * Postgres connection pool for business data.
- * Business tables live in the same database as DBOS system state.
- * On first call to ensureSchema(), we run the shared schema.sql to create tables.
- */
 import { Pool } from "pg";
 import * as fs from "fs";
 import * as path from "path";
@@ -11,7 +6,7 @@ import { getDatabaseUrl, getPoolMax } from "./config";
 let _pool: Pool | undefined;
 let _schemaApplied = false;
 
-// schema.sql lives at src/schema.sql (one level up from platform/).
+// schema.sql is one level up from platform/ (src/schema.sql).
 const SCHEMA_PATH = path.join(__dirname, "..", "schema.sql");
 
 export function getPool(): Pool {
@@ -20,7 +15,6 @@ export function getPool(): Pool {
   return _pool;
 }
 
-/** Run schema.sql once to ensure all tables + indexes exist. */
 export async function ensureSchema(): Promise<void> {
   if (_schemaApplied) return;
   try {
@@ -33,7 +27,6 @@ export async function ensureSchema(): Promise<void> {
   }
 }
 
-/** Graceful shutdown — drain the pool. */
 export async function closePool(): Promise<void> {
   if (_pool) {
     await _pool.end();
@@ -42,7 +35,6 @@ export async function closePool(): Promise<void> {
   }
 }
 
-/** Run a parameterised query and return rows. */
 export async function query<T = Record<string, unknown>>(
   sql: string,
   params: unknown[] = [],
@@ -51,7 +43,6 @@ export async function query<T = Record<string, unknown>>(
   return result.rows as T[];
 }
 
-/** Run a query and return first row or undefined. */
 export async function queryOne<T = Record<string, unknown>>(
   sql: string,
   params: unknown[] = [],

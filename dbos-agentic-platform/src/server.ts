@@ -19,7 +19,6 @@ async function main(): Promise<void> {
 
   app.get("/healthz", (_req, res) => res.json({ ok: true, ts: new Date().toISOString() }));
 
-  // Mount each workflow module's HTTP router under /workflow.
   for (const m of workflowModules) {
     app.use("/workflow", m.buildRouter(client));
   }

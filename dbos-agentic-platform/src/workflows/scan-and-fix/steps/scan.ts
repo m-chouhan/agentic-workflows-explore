@@ -1,7 +1,3 @@
-/**
- * Scan step (deterministic): shallow-clone a public repo and run a Trivy
- * filesystem scan, returning normalised findings.
- */
 import { DBOS } from "@dbos-inc/dbos-sdk";
 import { exec } from "child_process";
 import { promisify } from "util";
@@ -53,7 +49,7 @@ async function runTrivy(workDir: string): Promise<ScanFinding[]> {
   try {
     const result = await execAsync(
       `trivy fs --format json --scanners vuln --quiet ${workDir}`,
-      { timeout: 120_000, maxBuffer: 10 * 1024 * 1024 }, // 10MB buffer for large reports
+      { timeout: 120_000, maxBuffer: 10 * 1024 * 1024 }, // 10 MB — large monorepos can exceed the default
     );
     stdout = result.stdout;
   } catch (err: any) {
@@ -74,7 +70,7 @@ async function runTrivy(workDir: string): Promise<ScanFinding[]> {
   }
 
   const findings: ScanFinding[] = [];
-  const seen = new Set<string>(); // deduplicate by VulnerabilityID
+  const seen = new Set<string>(); // same CVE can appear across multiple targets
 
   for (const result of report.Results ?? []) {
     for (const v of result.Vulnerabilities ?? []) {
@@ -101,7 +97,6 @@ async function runTrivy(workDir: string): Promise<ScanFinding[]> {
   return findings;
 }
 
-/** Clone the repo, run the scanner, and clean up the work dir. */
 export async function runScanners(repo: string, branch: string): Promise<ScanFinding[]> {
   DBOS.logger.info(`[scan] runScanners: ${repo}@${branch}`);
 

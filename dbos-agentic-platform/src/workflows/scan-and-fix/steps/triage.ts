@@ -1,7 +1,3 @@
-/**
- * Triage step (agentic): uses LLM structured output to prioritise and
- * classify scan findings with reasoning.
- */
 import { generateText, Output } from "ai";
 import { DBOS } from "@dbos-inc/dbos-sdk";
 import { getChatModel } from "../../../platform/llm";

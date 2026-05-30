@@ -1,10 +1,5 @@
-/**
- * Shared platform configuration — single source of truth for infra-level values.
- * All values come from environment variables (set in .env for local dev).
- * Functions are used for runtime-read values to ensure dotenv.config() runs first.
- * Workflow-specific constants (queue names, workflow names) live inside each
- * workflow module, NOT here.
- */
+// These are functions, not top-level constants, so dotenv.config() has already run before values are read.
+// Workflow-specific constants (queue names, workflow names) live in each workflow module's constants.ts.
 
 function required(key: string): string {
   const val = process.env[key];
@@ -12,7 +7,6 @@ function required(key: string): string {
   return val;
 }
 
-// ── Database ─────────────────────────────────────────────────────────────────
 export function getDatabaseUrl(): string {
   const host     = required("PGHOST");
   const port     = process.env.PGPORT ?? "5432";
@@ -26,7 +20,6 @@ export function getPoolMax(): number {
   return parseInt(process.env.DB_POOL_MAX ?? "10", 10);
 }
 
-// ── LLM ───────────────────────────────────────────────────────────────────────
 export function getModel(): string {
   return required("GOOGLE_MODEL");
 }

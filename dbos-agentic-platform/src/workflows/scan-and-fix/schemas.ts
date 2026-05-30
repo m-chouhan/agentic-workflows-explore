@@ -1,13 +1,4 @@
-/**
- * Zod schemas for the vulnerability scan-and-fix workflow.
- *
- * Deterministic outputs (scanner results, policy) use strict enums.
- * Agentic outputs (triage reasoning, fix patches) use .describe() hints
- * so the LLM knows what to generate inside the constrained shape.
- */
 import { z } from "zod";
-
-// ── Deterministic: Scanner output ────────────────────────────────────────────
 
 export const ScanFindingSchema = z.object({
   id: z.string().describe("CVE or rule ID, e.g. CVE-2026-1234 or semgrep-rule-id"),
@@ -24,8 +15,6 @@ export const ScanFindingSchema = z.object({
 });
 export type ScanFinding = z.infer<typeof ScanFindingSchema>;
 
-// ── Agentic: Triage output (LLM fills reasoning) ────────────────────────────
-
 export const TriagedFindingSchema = z.object({
   findingId: z.string(),
   adjustedSeverity: z.enum(["critical", "high", "medium", "low", "false-positive"]),
@@ -41,8 +30,6 @@ export const TriageResultSchema = z.object({
   recommendedAction: z.enum(["block-deploy", "warn-and-proceed", "informational"]),
 });
 export type TriageResult = z.infer<typeof TriageResultSchema>;
-
-// ── Agentic: Fix candidate output (LLM generates patch) ─────────────────────
 
 export const FileChangeSchema = z.object({
   filePath: z.string(),
@@ -65,16 +52,12 @@ export const FixCandidateSchema = z.object({
 });
 export type FixCandidate = z.infer<typeof FixCandidateSchema>;
 
-// ── Agentic: PR description output ──────────────────────────────────────────
-
 export const PRDescriptionSchema = z.object({
   title: z.string().describe("PR title, e.g. [SECURITY] Fix CVE-2026-xxxx in package-name"),
   body: z.string().describe("Markdown PR body: vulnerability details, fix summary, testing notes"),
   labels: z.array(z.string()).describe("Labels to apply, e.g. ['security', 'automated']"),
 });
 export type PRDescription = z.infer<typeof PRDescriptionSchema>;
-
-// ── Workflow-level result ────────────────────────────────────────────────────
 
 export const ScanAndFixResultSchema = z.object({
   workflowId: z.string(),

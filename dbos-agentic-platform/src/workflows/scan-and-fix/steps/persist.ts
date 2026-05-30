@@ -1,6 +1,3 @@
-/**
- * Policy + persistence steps (deterministic, idempotent).
- */
 import { query } from "../../../platform/db";
 import type { ScanFinding, TriageResult } from "../schemas";
 

@@ -1,7 +1,3 @@
-/**
- * Fix-generation step (agentic): uses LLM structured output to generate
- * code patches or version-bump instructions for a single finding.
- */
 import { generateText, Output } from "ai";
 import { DBOS } from "@dbos-inc/dbos-sdk";
 import { getChatModel } from "../../../platform/llm";

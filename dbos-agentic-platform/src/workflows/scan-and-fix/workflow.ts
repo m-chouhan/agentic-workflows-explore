@@ -1,15 +1,3 @@
-/**
- * DBOS Workflow: Scan → Policy → Triage → Persist
- *
- * Orchestration only — each external/non-deterministic operation is a step
- * imported from ./steps. Deterministic steps (scan, policy, persist) are
- * separated from agentic steps (triage, fix generation).
- *
- * Phase 1: Shallow-clone public repo, run Trivy filesystem scan (deterministic)
- * Phase 2: Policy evaluation (deterministic — CVSS threshold)
- * Phase 3: Triage (agentic — LLM prioritises findings with reasoning)
- * Phase 4: Persist results to Postgres
- */
 import { DBOS } from "@dbos-inc/dbos-sdk";
 import { runScanners } from "./steps/scan";
 import { triageFindings } from "./steps/triage";
@@ -21,7 +9,6 @@ async function scanAndFix(repo: string, branch: string): Promise<ScanAndFixResul
   const workflowId = DBOS.workflowID ?? `scan-${Date.now()}`;
   DBOS.logger.info(`[scan-and-fix] ▶ scanAndFix(${repo}@${branch})  wfId=${workflowId}`);
 
-  // Phase 1: Scan
   const findings = await DBOS.runStep(() => runScanners(repo, branch), { name: "scan" });
 
   if (findings.length === 0) {
@@ -30,11 +17,9 @@ async function scanAndFix(repo: string, branch: string): Promise<ScanAndFixResul
     return { workflowId, repo, branch, totalFindings: 0, blockerCount: 0, fixesAttempted: 0, fixesSucceeded: 0, prUrls: [], status: "completed" };
   }
 
-  // Phase 2: Policy
   const blockerCount = countBlockers(findings);
   DBOS.logger.info(`[scan-and-fix] policy: ${blockerCount} blockers / ${findings.length} total`);
 
-  // Phase 3: Triage (agentic)
   let triage: TriageResult;
   try {
     triage = await DBOS.runStep(() => triageFindings(findings), {
@@ -43,6 +28,7 @@ async function scanAndFix(repo: string, branch: string): Promise<ScanAndFixResul
     });
   } catch (err) {
     DBOS.logger.error(`triage failed: ${(err as Error).message}`);
+    // Fallback: use raw scanner severity so the workflow still completes.
     triage = {
       prioritizedFindings: findings.map((f) => ({
         findingId: f.id,
@@ -57,7 +43,6 @@ async function scanAndFix(repo: string, branch: string): Promise<ScanAndFixResul
     };
   }
 
-  // Phase 4: Persist
   await DBOS.runStep(() => writeScanResults(workflowId, repo, branch, findings, triage.blockerCount, triage, "completed"), { name: "persist" });
 
   const result: ScanAndFixResult = {
