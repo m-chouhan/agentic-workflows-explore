@@ -2,7 +2,7 @@ import * as path from "path";
 import { DBOS } from "@dbos-inc/dbos-sdk";
 import type { WorkflowModule } from "../../platform/types";
 import { buildVulnRouter } from "./routes";
-import { VULN_QUEUE_NAME, SCAN_AND_FIX_WORKFLOW } from "./constants";
+import { QUEUE_NAME, WORKFLOW_NAME } from "./constants";
 import { runScanners } from "./steps/scan";
 import { triageFindings } from "./steps/triage";
 import { countBlockers, writeScanResults } from "./steps/persist";
@@ -63,11 +63,11 @@ async function scanAndFix(repo: string, branch: string): Promise<ScanAndFixResul
   return result;
 }
 
-const scanAndFixWorkflow = DBOS.registerWorkflow(scanAndFix, { name: SCAN_AND_FIX_WORKFLOW });
+const scanAndFixWorkflow = DBOS.registerWorkflow(scanAndFix, { name: WORKFLOW_NAME });
 
 export const scanAndFixModule: WorkflowModule = {
-  name: SCAN_AND_FIX_WORKFLOW,
-  queueName: VULN_QUEUE_NAME,
+  name: WORKFLOW_NAME,
+  queueName: QUEUE_NAME,
   schemaPath: path.join(__dirname, "schema.sql"),
   buildRouter: buildVulnRouter,
   register: () => { void scanAndFixWorkflow; }, // ensure module is loaded and workflow registered

@@ -5,7 +5,7 @@ import { Router, Request, Response } from "express";
 import { DBOSClient } from "@dbos-inc/dbos-sdk";
 import { z } from "zod";
 import { queryOne } from "../../platform/db";
-import { VULN_QUEUE_NAME, SCAN_AND_FIX_WORKFLOW } from "./constants";
+import { QUEUE_NAME, WORKFLOW_NAME } from "./constants";
 
 const ScanRequestSchema = z.object({
   repo: z.string().min(1).describe("GitHub repo in owner/name format"),
@@ -27,7 +27,7 @@ export function buildVulnRouter(client: DBOSClient): Router {
 
     try {
       await client.enqueue(
-        { queueName: VULN_QUEUE_NAME, workflowName: SCAN_AND_FIX_WORKFLOW, workflowID: workflowId },
+        { queueName: QUEUE_NAME, workflowName: WORKFLOW_NAME, workflowID: workflowId },
         repo, branch,
       );
       res.status(202).json({ workflowId, status: "ENQUEUED", pollUrl: `/workflow/scan/${workflowId}` });
