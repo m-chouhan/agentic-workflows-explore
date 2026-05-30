@@ -4,7 +4,6 @@
 
 set -euo pipefail
 
-COMPOSE_FILE="docker-compose.local.yml"
 ENV_FILE=".env.local"
 
 print_banner() {
@@ -35,18 +34,18 @@ check_env() {
 case "${1:-start}" in
   --down)
     printf '\033[1;33m[down]\033[0m Stopping and removing containers...\n'
-    docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" down
+    docker compose --env-file "$ENV_FILE" down
     exit 0
     ;;
   --logs)
-    docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" logs -f
+    docker compose --env-file "$ENV_FILE" logs -f
     exit 0
     ;;
   --clean)
     printf '\033[1;31m[clean]\033[0m Removing containers AND volumes (all data will be deleted)...\n'
     read -rp "Are you sure? [y/N] " confirm
     [[ "$confirm" =~ ^[Yy]$ ]] || exit 0
-    docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" down -v
+    docker compose --env-file "$ENV_FILE" down -v
     exit 0
     ;;
 esac
@@ -61,7 +60,7 @@ fi
 
 printf '\033[1;32m[start]\033[0m Starting stack (this may take a few minutes on first run)...\n\n'
 
-docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" up $BUILD_FLAG -d
+docker compose --env-file "$ENV_FILE" up $BUILD_FLAG -d
 
 printf '\n\033[1;32m[ready]\033[0m Stack is starting. Services:\n\n'
 printf '  \033[1;36m→ API Server:\033[0m          http://localhost:3002\n'

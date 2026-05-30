@@ -57,6 +57,11 @@ services:
       PGDATABASE: dbos_platform
     networks:
       - dbos-net
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/healthz || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
 
 networks:
   dbos-net:
