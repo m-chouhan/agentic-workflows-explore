@@ -2,8 +2,9 @@ import * as path from "path";
 import { DBOS } from "@dbos-inc/dbos-sdk";
 import type { WorkflowModule } from "../../platform/types";
 import { buildVulnRouter } from "./routes";
-import { QUEUE_NAME, WORKFLOW_NAME } from "./constants";
+import { QUEUE_NAME, WORKFLOW_NAME, TRIAGE_LIMIT } from "./constants";
 import { runScanners } from "./steps/scan";
+import { prioritizeForTriage } from "./steps/prioritize";
 import { triageFindings } from "./steps/triage";
 import { countBlockers, writeScanResults } from "./steps/persist";
 import type { TriageResult, ScanAndFixResult } from "./schemas";
@@ -23,9 +24,12 @@ async function scanAndFix(repo: string, branch: string): Promise<ScanAndFixResul
   const blockerCount = countBlockers(findings);
   DBOS.logger.info(`[scan-and-fix] policy: ${blockerCount} blockers / ${findings.length} total`);
 
+  const topFindings = prioritizeForTriage(findings, TRIAGE_LIMIT);
+  DBOS.logger.info(`[scan-and-fix] triage slice: ${topFindings.length} / ${findings.length} findings`);
+
   let triage: TriageResult;
   try {
-    triage = await DBOS.runStep(() => triageFindings(findings), {
+    triage = await DBOS.runStep(() => triageFindings(topFindings), {
       name: "triage",
       retriesAllowed: true, maxAttempts: 2, intervalSeconds: 5, backoffRate: 1,
     });
@@ -33,7 +37,7 @@ async function scanAndFix(repo: string, branch: string): Promise<ScanAndFixResul
     DBOS.logger.error(`triage failed: ${(err as Error).message}`);
     // Fallback: use raw scanner severity so the workflow still completes.
     triage = {
-      prioritizedFindings: findings.map((f) => ({
+      prioritizedFindings: topFindings.map((f) => ({
         findingId: f.id,
         adjustedSeverity: f.severity === "info" ? "low" : f.severity,
         reasoning: "Triage agent unavailable — using scanner severity.",
