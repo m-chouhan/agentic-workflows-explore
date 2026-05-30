@@ -132,9 +132,9 @@ Two workflows: `analyzeYear` (sales analysis) + `scanAndFix` (vulnerability scan
 ### Pattern (mirrors `my-portfolio`)
 - `docker-compose.prod.yml` — production compose with `platform: linux/amd64`, `env_file: .env`
 - `cloud/server-setup.sh` — one-time Nginx/Certbot/UFW setup
-- `cloud/nginx/agentic-platform.conf` — proxy `agents.mchouhan.co.in` → `localhost:3002`
+- `cloud/nginx/agents-mchouhan.conf` — proxy `agents.mchouhan.co.in` → `localhost:3002`
 - `.github/workflows/deploy-agentic-docker.yml` — CI/CD: build → tar → scp → ssh load & up
-- `.github/workflows/deploy-agentic-nginx.yml` — deploy nginx config changes
+- `.github/workflows/deploy-nginx.yml` — deploy all nginx configs in `cloud/nginx/**`
 
 ### GitHub Secrets required (repo: `m-chouhan/agentic-workflows-explore`)
 | Secret | Value |
@@ -152,8 +152,8 @@ scp dbos-agentic-platform/cloud/server-setup.sh root@62.171.183.99:/tmp/
 ssh contabo-agentic "bash /tmp/server-setup.sh"
 
 # 2. Deploy nginx config
-scp dbos-agentic-platform/cloud/nginx/agentic-platform.conf root@62.171.183.99:/etc/nginx/sites-available/
-ssh contabo-agentic "ln -sf /etc/nginx/sites-available/agentic-platform.conf /etc/nginx/sites-enabled/ && nginx -t && systemctl reload nginx"
+scp dbos-agentic-platform/cloud/nginx/agents-mchouhan.conf root@62.171.183.99:/etc/nginx/sites-available/
+ssh contabo-agentic "ln -sf /etc/nginx/sites-available/agents-mchouhan.conf /etc/nginx/sites-enabled/ && nginx -t && systemctl reload nginx"
 ```
 
 ### Deploy manually (without CI)

@@ -15,7 +15,7 @@
 | App server port | `3002` (maps to container port 3000) |
 | Domain | `agents.mchouhan.co.in` (A record → `62.171.183.99`) |
 | SSL | Let's Encrypt via Certbot, auto-renews, expires 2026-08-23 |
-| Nginx config | `/etc/nginx/sites-available/agentic-platform.conf` (symlinked to sites-enabled) |
+| Nginx config | `/etc/nginx/sites-available/agents-mchouhan.conf` (symlinked to sites-enabled) |
 
 ## Containers (docker ps)
 
@@ -46,14 +46,13 @@ ssh contabo-agentic "bash ~/box-setup.sh"
 Installs: Docker, Docker Compose plugin, Nginx, Certbot, UFW (ports 22/80/443/3002).
 
 ### 3. Nginx config (fully CI-managed)
-Pushing any change to `cloud/nginx/agentic-platform.conf` on `main` triggers
-`deploy-agentic-nginx.yml` which SCPs, symlinks, and reloads nginx automatically.
-The first deploy was done via CI — no manual SCP was needed.
+Pushing any change to `cloud/nginx/**` on `main` triggers
+`deploy-nginx.yml` which SCPs all configs, symlinks, and reloads nginx automatically.
 
 To deploy manually (e.g. CI is broken):
 ```bash
-scp cloud/nginx/agentic-platform.conf root@62.171.183.99:/etc/nginx/sites-available/
-ssh contabo-agentic "ln -sf /etc/nginx/sites-available/agentic-platform.conf \
+scp cloud/nginx/agents-mchouhan.conf root@62.171.183.99:/etc/nginx/sites-available/
+ssh contabo-agentic "ln -sf /etc/nginx/sites-available/agents-mchouhan.conf \
   /etc/nginx/sites-enabled/ && nginx -t && systemctl reload nginx"
 ```
 
@@ -72,7 +71,7 @@ Auto-renewal is scheduled via systemd timer — verify: `systemctl list-timers |
 | Workflow | Trigger | What it does |
 |---|---|---|
 | `deploy-agentic-docker.yml` | push to `main` touching `dbos-agentic-platform/src/**`, `Dockerfile`, `docker-compose.prod.yml`, `cloud/box-setup.sh` | Runs box-setup.sh, builds image, deploys to Contabo, health checks |
-| `deploy-agentic-nginx.yml` | push to `main` touching `cloud/nginx/agentic-platform.conf` | SCPs config, reloads nginx, health checks |
+| `deploy-nginx.yml` | push to `main` touching `cloud/nginx/**` | SCPs all configs, symlinks, reloads nginx |
 
 **GitHub Secrets required** (`m-chouhan/agentic-workflows-explore`):
 

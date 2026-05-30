@@ -530,9 +530,9 @@ The Contabo VPS (`62.171.183.99`) already runs the DBOS platform. n8n runs along
 
 ```bash
 # 1. Deploy nginx config for n8n
-scp cloud/nginx/n8n-risk-agent.conf root@62.171.183.99:/etc/nginx/sites-available/
+scp cloud/nginx/n8n-mchouhan.conf root@62.171.183.99:/etc/nginx/sites-available/
 ssh contabo-agentic "
-  ln -sf /etc/nginx/sites-available/n8n-risk-agent.conf /etc/nginx/sites-enabled/
+  ln -sf /etc/nginx/sites-available/n8n-mchouhan.conf /etc/nginx/sites-enabled/
   nginx -t && systemctl reload nginx
 "
 
