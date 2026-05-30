@@ -7,7 +7,6 @@ on:
       - main
     paths:
       - dbos-agentic-platform/src/**
-      - dbos-agentic-platform/scripts/**
       - dbos-agentic-platform/Dockerfile
       - dbos-agentic-platform/docker-compose.prod.yml
       - dbos-agentic-platform/package*.json
@@ -19,6 +18,9 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: dbos-agentic-platform
 
     steps:
       - name: Checkout code
@@ -30,6 +32,7 @@ jobs:
           ssh-private-key: ${{ secrets.CLOUD_SSH_KEY }}
 
       - name: Ensure box is ready
+        working-directory: .
         run: |
           scp -o StrictHostKeyChecking=no \
             cloud/box-setup.sh \
@@ -37,27 +40,23 @@ jobs:
           ssh -o StrictHostKeyChecking=no root@${{ secrets.CLOUD_IP }} "bash ~/box-setup.sh"
 
       - name: Build Docker image
-        working-directory: dbos-agentic-platform
         run: docker build -t agentic-platform:latest .
 
       - name: Deploy to server
-        working-directory: dbos-agentic-platform
         run: |
           docker save agentic-platform:latest -o agentic-platform.tar
-          tar -czf deploy.tar.gz agentic-platform.tar docker-compose.prod.yml
           echo "GOOGLE_GENERATIVE_AI_API_KEY=${{ secrets.GOOGLE_GENERATIVE_AI_API_KEY }}" >> .env.production
           scp -o StrictHostKeyChecking=no \
-            deploy.tar.gz \
+            agentic-platform.tar \
+            docker-compose.prod.yml \
             .env.production \
             root@${{ secrets.CLOUD_IP }}:~/
           ssh -o StrictHostKeyChecking=no root@${{ secrets.CLOUD_IP }} << 'ENDSSH'
             set -e
             mkdir -p /opt/agentic-platform
+            docker load -i ~/agentic-platform.tar
             mv ~/.env.production /opt/agentic-platform/.env
-            cd ~
-            tar -xzf deploy.tar.gz
-            docker load -i agentic-platform.tar
-            cp docker-compose.prod.yml /opt/agentic-platform/
+            cp ~/docker-compose.prod.yml /opt/agentic-platform/
             cd /opt/agentic-platform
             docker compose -f docker-compose.prod.yml down 2>/dev/null || true
             docker compose -f docker-compose.prod.yml up -d
@@ -66,6 +65,7 @@ jobs:
           ENDSSH
 
       - name: Health check
+        working-directory: .
         run: |
           for i in $(seq 1 12); do
             echo "Attempt $i/12..."
