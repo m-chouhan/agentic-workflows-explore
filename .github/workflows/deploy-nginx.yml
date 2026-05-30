@@ -1,0 +1,45 @@
+name: Deploy Nginx Configs to Contabo
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - cloud/nginx/**
+
+# Required secrets: CLOUD_SSH_KEY, CLOUD_IP
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure SSH
+        uses: webfactory/ssh-agent@v0.9.1
+        with:
+          ssh-private-key: ${{ secrets.CLOUD_SSH_KEY }}
+
+      - name: Deploy all nginx configs
+        run: |
+          # Copy all conf files to /tmp on the server
+          for conf in cloud/nginx/*.conf; do
+            filename=$(basename "$conf")
+            scp -o StrictHostKeyChecking=no "$conf" root@${{ secrets.CLOUD_IP }}:/tmp/"$filename"
+          done
+
+          ssh -o StrictHostKeyChecking=no root@${{ secrets.CLOUD_IP }} << 'EOF'
+            set -e
+            for conf in /tmp/*.conf; do
+              filename=$(basename "$conf")
+              sitename="${filename%.conf}"
+              mv "$conf" /etc/nginx/sites-available/"$filename"
+              ln -sf /etc/nginx/sites-available/"$filename" /etc/nginx/sites-enabled/"$filename"
+              echo "Deployed: $filename"
+            done
+            nginx -t && systemctl reload nginx
+            echo "All nginx configs deployed and reloaded"
+          EOF
