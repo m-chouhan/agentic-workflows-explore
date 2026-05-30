@@ -1,15 +1,18 @@
 /**
  * Postgres connection pool for business data.
  * Business tables live in the same database as DBOS system state.
- * On first call to ensureSchema(), we run schema.sql to create tables if needed.
+ * On first call to ensureSchema(), we run the shared schema.sql to create tables.
  */
 import { Pool } from "pg";
 import * as fs from "fs";
 import * as path from "path";
-import { getDatabaseUrl, getPoolMax } from "../config";
+import { getDatabaseUrl, getPoolMax } from "./config";
 
 let _pool: Pool | undefined;
 let _schemaApplied = false;
+
+// schema.sql lives at src/schema.sql (one level up from platform/).
+const SCHEMA_PATH = path.join(__dirname, "..", "schema.sql");
 
 export function getPool(): Pool {
   if (_pool) return _pool;
@@ -20,14 +23,13 @@ export function getPool(): Pool {
 /** Run schema.sql once to ensure all tables + indexes exist. */
 export async function ensureSchema(): Promise<void> {
   if (_schemaApplied) return;
-  const schemaPath = path.join(__dirname, "schema.sql");
   try {
-    const schema = fs.readFileSync(schemaPath, "utf8");
+    const schema = fs.readFileSync(SCHEMA_PATH, "utf8");
     await getPool().query(schema);
     _schemaApplied = true;
   } catch (err) {
     _schemaApplied = false;
-    throw new Error(`Failed to apply schema from ${schemaPath}: ${(err as Error).message}`);
+    throw new Error(`Failed to apply schema from ${SCHEMA_PATH}: ${(err as Error).message}`);
   }
 }
 

@@ -1,13 +1,8 @@
 /**
- * GitHub client setup — @octokit/rest (CJS-compatible).
+ * GitHub client setup — @octokit/rest (CJS-compatible). Shared platform infra.
  *
  * Supports PAT auth for local dev: set GITHUB_TOKEN env var.
  * For production: use @octokit/auth-app with GitHub App credentials.
- *
- * Usage:
- *   import { getOctokit } from "./octokit";
- *   const octokit = getOctokit();
- *   await octokit.repos.get({ owner, repo });
  */
 import { Octokit } from "@octokit/rest";
 
@@ -24,7 +19,6 @@ export function getOctokit(): Octokit {
     );
   }
 
-  // For PoC: simple PAT auth. Production would use @octokit/auth-app.
   _octokit = new Octokit({ auth: token });
   return _octokit;
 }

@@ -1,8 +1,21 @@
 # dbos-agentic-platform — Architecture Refactor Plan
 
 **Date:** 2026-05-30
-**Status:** Approved, not yet executed
+**Status:** Executed 2026-05-30 (typecheck + build green)
 **Scope:** Restructure `dbos-agentic-platform/src` so the DBOS workflow is a first-class citizen, with a thin shared "platform" layer supporting easy authoring of future workflows.
+
+### Implementation notes (deviations from the original sketch)
+
+- Added `platform/llm.ts` — a `getChatModel()` factory so the provider/model choice
+  lives in one place instead of being hard-coded in each agent step.
+- Added `platform/types.ts` — a `WorkflowModule` contract (`name`, `queueName`,
+  `buildRouter`, `register`). The server mounts routers; the worker calls `register()`
+  (a lazy `require("./workflow")`) so the API server doesn't load heavy workflow code.
+- Each workflow owns a `constants.ts` (workflow + queue names) instead of central config.
+- `schema.sql` lives at `src/schema.sql`; `platform/db.ts` resolves it via
+  `path.join(__dirname, "..", "schema.sql")`. Dockerfile copies it to `dist/src/schema.sql`.
+- Steps split into `steps/`: `scan.ts`, `triage.ts`, `generateFix.ts`, `createPr.ts`,
+  `persist.ts` (policy `countBlockers` + `writeScanResults`).
 
 ---
 

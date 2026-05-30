@@ -80,28 +80,35 @@ default CMD for workers:
 
 ## Project Layout
 
+The DBOS workflow is the first-class citizen. Each workflow is a self-contained
+vertical module under `workflows/<name>/`; `platform/` is the thin shared layer
+that supports building workflows. Adding a workflow = create a folder + append it
+to `workflows/index.ts`.
+
 ```
 dbos-agentic-platform/
 ├── Dockerfile
 ├── docker-compose.yml
 ├── package.json
 ├── src/
-│   ├── config.ts                 # Shared constants (queues, model, pool size)
-│   ├── server.ts                 # Express + DBOSClient (enqueues work)
-│   ├── worker.ts                 # DBOS.launch() (executes work)
-│   ├── api/
-│   │   └── vulnRoutes.ts         # /api/scan, /api/findings
-│   ├── agent/
-│   │   ├── vulnTriageAgent.ts    # Gemini → prioritised vuln triage
-│   │   └── vulnFixAgent.ts       # Gemini → code/version fix patches
-│   ├── db/
-│   │   ├── postgres.ts           # pg Pool singleton + query helpers
-│   │   └── schema.sql            # Vulnerability tables
-│   ├── github/
-│   │   ├── octokit.ts            # GitHub client (PAT / App auth)
-│   │   └── prCreator.ts          # Git Trees API → atomic commit → draft PR
-│   ├── schemas/
-│   │   └── vulnSchemas.ts        # Zod schemas (ScanFinding, TriageResult, FixCandidate)
+│   ├── server.ts                 # thin: mounts each module's router (enqueues work)
+│   ├── worker.ts                 # thin: registers each module's workflow + queue
+│   ├── schema.sql                # shared business-data schema (split per-workflow later)
+│   ├── platform/                 # shared supporting layer — plumbing every workflow uses
+│   │   ├── config.ts             # infra config (db url, pool, model name)
+│   │   ├── db.ts                 # pg Pool + query helpers + ensureSchema()
+│   │   ├── github.ts             # GitHub (Octokit) client + parseRepo
+│   │   ├── llm.ts                # chat-model factory (provider choice in one place)
+│   │   ├── dbos.ts               # DBOS lifecycle: createDbosClient() / launchWorker()
+│   │   └── types.ts              # WorkflowModule contract
 │   └── workflows/
-│       └── scanAndFix.ts         # scan → triage → fix → PR → persist
+│       ├── index.ts              # registry: lists every workflow module
+│       └── scan-and-fix/         # ⭐ a workflow module (vertical slice)
+│           ├── workflow.ts       # orchestration only (scan → policy → triage → persist)
+│           ├── steps/            # scan · triage · generateFix · createPr · persist
+│           ├── schemas.ts        # Zod schemas for this workflow
+│           ├── routes.ts         # /workflow/scan, /workflow/findings
+│           ├── constants.ts      # workflow + queue names
+│           ├── index.ts          # module descriptor (WorkflowModule)
+│           └── README.md         # flow, steps, API, persistence
 ```

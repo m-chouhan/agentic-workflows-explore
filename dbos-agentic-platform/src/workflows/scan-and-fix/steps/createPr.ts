@@ -4,8 +4,8 @@
  *
  * Flow: getBaseSha → createBranch → createCommit (blobs + tree) → createPR → pollChecks
  */
-import { getOctokit, parseRepo } from "./octokit";
-import type { FixCandidate, PRDescription } from "../schemas/vulnSchemas";
+import { getOctokit, parseRepo } from "../../../platform/github";
+import type { FixCandidate, PRDescription } from "../schemas";
 
 export interface PRResult {
   prUrl: string;

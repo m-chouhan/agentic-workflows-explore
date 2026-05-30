@@ -1,30 +1,21 @@
-// Worker — DBOS executor. Owns all workflow/step definitions; no HTTP server.
-// Enqueued work arrives via shared Postgres; app server uses DBOSClient to submit it.
+// Worker — DBOS executor. Registers every workflow module and launches the
+// DBOS runtime; no HTTP server. Enqueued work arrives via shared Postgres;
+// the app server uses DBOSClient to submit it.
 import * as dotenv from "dotenv";
 dotenv.config();
 
 import { DBOS } from "@dbos-inc/dbos-sdk";
-import { ensureSchema } from "./db/postgres";
-import { getDatabaseUrl, VULN_QUEUE_NAME } from "./config";
-
-// Importing registers workflows with DBOS (registerWorkflow runs at import time).
-import "./workflows/scanAndFix";
-
-async function bootstrapDbOs(): Promise<void> {
-  const databaseUrl = getDatabaseUrl();
-  const executorId = process.env.DBOS_EXECUTOR_ID ?? `worker-${process.pid}`;
-
-  DBOS.setConfig({ systemDatabaseUrl: databaseUrl, runAdminServer: false, executorID: executorId });
-  await DBOS.launch();
-
-  await DBOS.registerQueue(VULN_QUEUE_NAME);
-
-  DBOS.logger.info(`[worker] launched  pid=${process.pid}  executorId=${executorId}  queues=${VULN_QUEUE_NAME}`);
-}
+import { ensureSchema } from "./platform/db";
+import { launchWorker } from "./platform/dbos";
+import { workflowModules } from "./workflows";
 
 async function main(): Promise<void> {
   await ensureSchema();
-  await bootstrapDbOs();
+
+  // Register all workflows (+ their steps) BEFORE launching DBOS.
+  for (const m of workflowModules) m.register();
+
+  await launchWorker(workflowModules.map((m) => m.queueName));
 
   const shutdown = async () => { await DBOS.shutdown(); process.exit(0); };
   process.on("SIGTERM", shutdown);

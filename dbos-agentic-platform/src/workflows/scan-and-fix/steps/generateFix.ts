@@ -1,17 +1,16 @@
 /**
- * Vulnerability Fix Agent — uses LLM structured output to generate
+ * Fix-generation step (agentic): uses LLM structured output to generate
  * code patches or version-bump instructions for a single finding.
  */
 import { generateText, Output } from "ai";
-import { google } from "@ai-sdk/google";
 import { DBOS } from "@dbos-inc/dbos-sdk";
-import { getModel } from "../config";
+import { getChatModel } from "../../../platform/llm";
 import {
   ScanFinding,
   FixCandidateSchema,
   FixCandidate,
   TriagedFindingSchema,
-} from "../schemas/vulnSchemas";
+} from "../schemas";
 import { z } from "zod";
 
 type TriagedFinding = z.infer<typeof TriagedFindingSchema>;
@@ -73,17 +72,17 @@ function buildFixPrompt(ctx: FixContext): string {
 export async function generateFix(ctx: FixContext): Promise<FixCandidate> {
   const prompt = buildFixPrompt(ctx);
 
-  DBOS.logger.info(`[fix-agent] → ${ctx.finding.id} | ${prompt.length} chars`);
+  DBOS.logger.info(`[fix] → ${ctx.finding.id} | ${prompt.length} chars`);
 
   const { experimental_output: object, usage } = await (generateText as any)({
-    model: google(getModel() as any),
+    model: getChatModel(),
     output: (Output.object as any)({ schema: FixCandidateSchema }),
     prompt,
   });
 
   const result = object as FixCandidate;
   DBOS.logger.info(
-    `[fix-agent] ← tokens in=${usage.inputTokens} out=${usage.outputTokens} | ` +
+    `[fix] ← tokens in=${usage.inputTokens} out=${usage.outputTokens} | ` +
     `confidence=${result.confidence} type=${result.fixType} breaking=${result.breakingChange}`,
   );
 

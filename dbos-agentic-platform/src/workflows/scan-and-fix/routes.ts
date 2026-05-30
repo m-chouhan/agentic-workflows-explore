@@ -1,8 +1,14 @@
+/**
+ * HTTP endpoints for the scan-and-fix workflow.
+ *   POST /workflow/scan            enqueue a scan
+ *   GET  /workflow/scan/:id        poll workflow status
+ *   GET  /workflow/findings/:repo  latest persisted findings for a repo
+ */
 import { Router, Request, Response } from "express";
 import { DBOSClient } from "@dbos-inc/dbos-sdk";
 import { z } from "zod";
-import { queryOne } from "../db/postgres";
-import { VULN_QUEUE_NAME, SCAN_AND_FIX_WORKFLOW } from "../config";
+import { queryOne } from "../../platform/db";
+import { VULN_QUEUE_NAME, SCAN_AND_FIX_WORKFLOW } from "./constants";
 
 const ScanRequestSchema = z.object({
   repo: z.string().min(1).describe("GitHub repo in owner/name format"),

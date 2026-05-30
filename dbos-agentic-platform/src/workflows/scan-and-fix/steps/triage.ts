@@ -1,12 +1,11 @@
 /**
- * Vulnerability Triage Agent — uses LLM structured output to prioritise
- * and classify scan findings with reasoning.
+ * Triage step (agentic): uses LLM structured output to prioritise and
+ * classify scan findings with reasoning.
  */
 import { generateText, Output } from "ai";
-import { google } from "@ai-sdk/google";
 import { DBOS } from "@dbos-inc/dbos-sdk";
-import { getModel } from "../config";
-import { ScanFinding, TriageResultSchema, TriageResult } from "../schemas/vulnSchemas";
+import { getChatModel } from "../../../platform/llm";
+import { ScanFinding, TriageResultSchema, TriageResult } from "../schemas";
 
 export async function triageFindings(findings: ScanFinding[]): Promise<TriageResult> {
   if (!findings.length) {
@@ -31,17 +30,17 @@ export async function triageFindings(findings: ScanFinding[]): Promise<TriageRes
     JSON.stringify(findings, null, 2),
   ].join("\n");
 
-  DBOS.logger.info(`[triage-agent] → ${findings.length} findings | ${prompt.length} chars`);
+  DBOS.logger.info(`[triage] → ${findings.length} findings | ${prompt.length} chars`);
 
   const { experimental_output: object, usage } = await (generateText as any)({
-    model: google(getModel() as any),
+    model: getChatModel(),
     output: (Output.object as any)({ schema: TriageResultSchema }),
     prompt,
   });
 
   const result = object as TriageResult;
   DBOS.logger.info(
-    `[triage-agent] ← tokens in=${usage.inputTokens} out=${usage.outputTokens} | ` +
+    `[triage] ← tokens in=${usage.inputTokens} out=${usage.outputTokens} | ` +
     `blockers=${result.blockerCount} action=${result.recommendedAction}`,
   );
 
