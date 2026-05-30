@@ -17,21 +17,6 @@ services:
     networks:
       - agentic-net
 
-  db-seed:
-    image: agentic-platform:latest
-    platform: linux/amd64
-    container_name: agentic-db-seed
-    command: node dist/scripts/seed-sales.js
-    restart: "no"
-    depends_on:
-      postgres:
-        condition: service_healthy
-    env_file: .env
-    environment:
-      PGHOST: postgres
-    networks:
-      - agentic-net
-
   worker:
     image: agentic-platform:latest
     platform: linux/amd64
@@ -41,8 +26,6 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      db-seed:
-        condition: service_completed_successfully
     env_file: .env
     environment:
       PGHOST: postgres
@@ -59,8 +42,6 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      db-seed:
-        condition: service_completed_successfully
     ports:
       - "3002:3000"
     env_file: .env

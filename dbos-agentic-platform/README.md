@@ -6,10 +6,7 @@ DBOS-orchestrated agentic workflows combining deterministic steps with LLM-power
 
 ## Workflows
 
-### Sales Analysis (PoC #1)
-Read sales data → aggregate → LLM analysis → write insights.
-
-### Vulnerability Scan & Fix (PoC #2)
+### Vulnerability Scan & Fix
 Scan repo → policy check → LLM triage → LLM fix generation → GitHub PR creation.
 
 ## Architecture
@@ -17,7 +14,6 @@ Scan repo → policy check → LLM triage → LLM fix generation → GitHub PR c
 ```
                 Express (server.ts)                    DBOS Worker (worker.ts)
                 ───────────────────                    ────────────────────────
-                POST /api/analyze                      analyzeYear workflow
                 POST /api/scan          ─── Postgres   scanAndFix workflow
                 GET  /healthz               queues ──►
                                                        ┌─ deterministic steps (DB, CLI, API)
@@ -42,11 +38,9 @@ npm install
 cp .env.example .env
 # Edit .env: set GOOGLE_GENERATIVE_AI_API_KEY (required)
 #            set GITHUB_TOKEN (optional — enables PR creation)
+# The schema is applied automatically by the worker/server on boot.
 
-# 4. Seed sales data
-npm run seed
-
-# 5. Start worker + server (separate terminals)
+# 4. Start worker + server (separate terminals)
 npm run dev:worker
 npm run dev:server
 ```
@@ -54,13 +48,6 @@ npm run dev:server
 ## API
 
 ```bash
-# Sales analysis
-curl -X POST http://localhost:3000/api/analyze -H "Content-Type: application/json" \
-  -d '{"year": 2025}'
-
-curl http://localhost:3000/api/analyze/<workflowId>
-curl http://localhost:3000/api/insights/2025
-
 # Vulnerability scan
 curl -X POST http://localhost:3000/api/scan -H "Content-Type: application/json" \
   -d '{"repo": "owner/repo", "branch": "main"}'
@@ -103,23 +90,18 @@ dbos-agentic-platform/
 │   ├── server.ts                 # Express + DBOSClient (enqueues work)
 │   ├── worker.ts                 # DBOS.launch() (executes work)
 │   ├── api/
-│   │   ├── salesRoutes.ts        # /api/analyze, /api/insights
 │   │   └── vulnRoutes.ts         # /api/scan, /api/findings
 │   ├── agent/
-│   │   ├── salesAnalysisAgent.ts # Gemini → structured sales insights
 │   │   ├── vulnTriageAgent.ts    # Gemini → prioritised vuln triage
 │   │   └── vulnFixAgent.ts       # Gemini → code/version fix patches
 │   ├── db/
 │   │   ├── postgres.ts           # pg Pool singleton + query helpers
-│   │   └── schema.sql            # All tables (sales + vuln)
+│   │   └── schema.sql            # Vulnerability tables
 │   ├── github/
 │   │   ├── octokit.ts            # GitHub client (PAT / App auth)
 │   │   └── prCreator.ts          # Git Trees API → atomic commit → draft PR
 │   ├── schemas/
 │   │   └── vulnSchemas.ts        # Zod schemas (ScanFinding, TriageResult, FixCandidate)
 │   └── workflows/
-│       ├── analyzeSales.ts       # read → aggregate → LLM → write
 │       └── scanAndFix.ts         # scan → triage → fix → PR → persist
-└── scripts/
-    └── seed-sales.ts             # Populate sales table with test data
 ```

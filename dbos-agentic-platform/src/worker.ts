@@ -5,10 +5,9 @@ dotenv.config();
 
 import { DBOS } from "@dbos-inc/dbos-sdk";
 import { ensureSchema } from "./db/postgres";
-import { getDatabaseUrl, ANALYSIS_QUEUE_NAME, VULN_QUEUE_NAME } from "./config";
+import { getDatabaseUrl, VULN_QUEUE_NAME } from "./config";
 
 // Importing registers workflows with DBOS (registerWorkflow runs at import time).
-import "./workflows/analyzeSales";
 import "./workflows/scanAndFix";
 
 async function bootstrapDbOs(): Promise<void> {
@@ -18,10 +17,9 @@ async function bootstrapDbOs(): Promise<void> {
   DBOS.setConfig({ systemDatabaseUrl: databaseUrl, runAdminServer: false, executorID: executorId });
   await DBOS.launch();
 
-  await DBOS.registerQueue(ANALYSIS_QUEUE_NAME);
   await DBOS.registerQueue(VULN_QUEUE_NAME);
 
-  DBOS.logger.info(`[worker] launched  pid=${process.pid}  executorId=${executorId}  queues=${ANALYSIS_QUEUE_NAME},${VULN_QUEUE_NAME}`);
+  DBOS.logger.info(`[worker] launched  pid=${process.pid}  executorId=${executorId}  queues=${VULN_QUEUE_NAME}`);
 }
 
 async function main(): Promise<void> {

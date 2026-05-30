@@ -5,7 +5,6 @@ import express from "express";
 import { DBOSClient } from "@dbos-inc/dbos-sdk";
 import { ensureSchema } from "./db/postgres";
 import { getDatabaseUrl } from "./config";
-import { buildSalesRouter } from "./api/salesRoutes";
 import { buildVulnRouter } from "./api/vulnRoutes";
 
 const PORT = parseInt(process.env.PORT ?? "3000", 10);
@@ -23,12 +22,10 @@ async function main(): Promise<void> {
 
   app.get("/healthz", (_req, res) => res.json({ ok: true, ts: new Date().toISOString() }));
 
-  app.use("/workflow", buildSalesRouter(client));
   app.use("/workflow", buildVulnRouter(client));
 
   app.listen(PORT, () => {
     console.log(`[server] listening on http://localhost:${PORT}`);
-    console.log(`  POST /workflow/analyze   { "year": 2025 }`);
     console.log(`  POST /workflow/scan      { "repo": "owner/name", "branch": "main" }`);
     console.log(`  GET  /healthz`);
   });

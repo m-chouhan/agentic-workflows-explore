@@ -2,7 +2,7 @@
   "name": "dbos-agentic-platform",
   "version": "0.1.0",
   "private": true,
-  "description": "DBOS-orchestrated agentic workflows: sales insights (PoC #1) + vulnerability scan-and-fix (PoC #2)",
+  "description": "DBOS-orchestrated agentic workflows: vulnerability scan-and-fix pipeline",
   "type": "commonjs",
   "scripts": {
     "build": "tsc",
@@ -10,7 +10,6 @@
     "dev:server": "tsx watch src/server.ts",
     "start:worker": "node dist/src/worker.js",
     "start:server": "node dist/src/server.js",
-    "seed": "tsx scripts/seed-sales.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

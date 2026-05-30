@@ -17,6 +17,5 @@ COPY --from=builder /app/dist/ dist/
 COPY src/db/schema.sql dist/src/db/schema.sql
 EXPOSE 3000
 # Override CMD at runtime:
-#   "node dist/src/worker.js"          for worker
-#   "node dist/scripts/seed-sales.js"  for one-shot seed
+#   "node dist/src/worker.js"   for worker
 CMD ["node", "dist/src/server.js"]

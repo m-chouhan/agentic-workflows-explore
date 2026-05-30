@@ -6,8 +6,7 @@
 #
 # Services:
 #   postgres     — PostgreSQL 16 (port 5432)
-#   db-seed      — one-shot: apply schema + seed sales data
-#   worker       — DBOS durable workflow executor
+#   worker       — DBOS durable workflow executor (applies schema on boot)
 #   app-server   — Express API server (port 3002)
 #   tools-ui     — React frontend via nginx (port 3003)  ← open this in browser
 
@@ -33,26 +32,6 @@ services:
     networks:
       - local-net
 
-  # ── One-shot: apply schema + seed sales data ─────────────────────────────────
-  db-seed:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: local-db-seed
-    command: node dist/scripts/seed-sales.js
-    restart: "no"
-    depends_on:
-      postgres:
-        condition: service_healthy
-    environment:
-      PGHOST: postgres
-      PGPORT: 5432
-      PGUSER: dbos
-      PGPASSWORD: dbos
-      PGDATABASE: dbos_platform
-    networks:
-      - local-net
-
   # ── DBOS Worker (workflow executor) ─────────────────────────────────────────
   worker:
     build:
@@ -64,8 +43,6 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      db-seed:
-        condition: service_completed_successfully
     environment:
       PGHOST: postgres
       PGPORT: 5432
@@ -90,8 +67,6 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      db-seed:
-        condition: service_completed_successfully
     ports:
       - "3002:3000"
     environment:

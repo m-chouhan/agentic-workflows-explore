@@ -10,7 +10,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return data as T;
 }
 
-// ── Sales ────────────────────────────────────────────────────────────────────
+// ── Shared workflow types ─────────────────────────────────────────────────────
 
 export interface EnqueueResponse {
   workflowId: string;
@@ -24,43 +24,6 @@ export interface WorkflowStatus {
   result?: unknown;
   error?: string;
 }
-
-export interface SalesInsights {
-  id: number;
-  workflow_id: string;
-  year: number;
-  generated_at: string;
-  total_revenue: number;
-  total_units: number;
-  top_product: string;
-  top_region: string;
-  summary: string;
-  insights_json: {
-    aggregated: {
-      byProduct: Array<{ product: string; revenue: number; units: number }>;
-      byRegion: Array<{ region: string; revenue: number }>;
-      byMonth: Array<{ month: string; revenue: number }>;
-    };
-    analysis: {
-      summary: string;
-      topProduct: string;
-      topRegion: string;
-      highlights: string[];
-      recommendations: string[];
-      riskFlags: string[];
-    };
-  };
-}
-
-export const salesApi = {
-  trigger: (year: number) =>
-    request<EnqueueResponse>("/analyze", {
-      method: "POST",
-      body: JSON.stringify({ year }),
-    }),
-  poll: (id: string) => request<WorkflowStatus>(`/analyze/${id}`),
-  insights: (year: number) => request<SalesInsights>(`/insights/${year}`),
-};
 
 // ── Vulnerability Scanner ─────────────────────────────────────────────────────
 
