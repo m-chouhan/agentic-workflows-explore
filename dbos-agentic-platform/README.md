@@ -25,57 +25,74 @@ Scan repo → policy check → LLM triage → LLM fix generation → GitHub PR c
 - **Postgres** holds both DBOS system state and business data (single database)
 - **Agents** use `generateText` + Zod structured output for type-safe LLM responses
 
-## Quick Start
+## Quick Start (Docker)
 
 ```bash
-# 1. Start Postgres
+# 1. Configure — copy the example and set your keys
+cp .env.local.example .env.local
+# Required: GOOGLE_GENERATIVE_AI_API_KEY  (https://aistudio.google.com/app/apikey)
+# Optional: GITHUB_TOKEN                  (enables PR creation; needs 'repo' scope)
+
+# ⚠ Make sure the key is set before starting — the worker will fail loudly otherwise.
+
+# 2. Start the stack (builds image on first run)
+docker compose --env-file .env.local up --build -d
+
+# Follow logs
+docker compose --env-file .env.local logs -f
+
+# Stop
+docker compose --env-file .env.local down
+
+# Full reset (wipes DB volume)
+docker compose --env-file .env.local down -v
+```
+
+Schema is applied automatically on boot. API is available at `http://localhost:3002`.
+
+## Quick Start (local dev without Docker)
+
+```bash
+npm install
+cp .env.local.example .env.local   # fill in keys
+
+# Run Postgres only via Docker
 docker compose up postgres -d
 
-# 2. Install deps
-npm install
-
-# 3. Configure
-cp .env.example .env
-# Edit .env: set GOOGLE_GENERATIVE_AI_API_KEY (required)
-#            set GITHUB_TOKEN (optional — enables PR creation)
-# The schema is applied automatically by the worker/server on boot.
-
-# 4. Start worker + server (separate terminals)
+# Start worker + server in separate terminals
 npm run dev:worker
 npm run dev:server
 ```
 
+API available at `http://localhost:3000` (no Docker port mapping in this mode).
+
 ## API
 
 ```bash
-# Vulnerability scan
-curl -X POST http://localhost:3000/api/scan -H "Content-Type: application/json" \
+# Trigger a scan
+curl -X POST http://localhost:3002/workflow/scan \
+  -H "Content-Type: application/json" \
   -d '{"repo": "owner/repo", "branch": "main"}'
 
-curl http://localhost:3000/api/scan/<workflowId>
-curl http://localhost:3000/api/findings/owner--repo
+# Poll status
+curl http://localhost:3002/workflow/scan/<workflowId>
+
+# Get persisted findings (repo with -- instead of /)
+curl http://localhost:3002/workflow/findings/owner--repo
 
 # Health check
-curl http://localhost:3000/healthz
+curl http://localhost:3002/healthz
 ```
 
-## Deployment (Docker / Droplet)
+## Deployment (prod / Contabo)
+
+CI builds the image and deploys via `docker-compose.prod.yml`. To deploy manually:
 
 ```bash
-# Build and run all services
-docker compose up --build -d
+docker compose -f docker-compose.prod.yml up -d
 
 # Scale workers
-docker compose up --scale worker=3 -d
-```
-
-The Dockerfile uses a multi-stage build (builder → production). Override the
-default CMD for workers:
-
-```yaml
-# docker-compose.yml already handles this:
-# app-server: node dist/src/server.js  (port 3000)
-# worker:     node dist/src/worker.js  (no port)
+docker compose -f docker-compose.prod.yml up --scale worker=3 -d
 ```
 
 ## Project Layout
@@ -93,7 +110,6 @@ dbos-agentic-platform/
 ├── src/
 │   ├── server.ts                 # thin: mounts each module's router (enqueues work)
 │   ├── worker.ts                 # thin: registers each module's workflow + queue
-│   ├── schema.sql                # shared business-data schema (split per-workflow later)
 │   ├── platform/                 # shared supporting layer — plumbing every workflow uses
 │   │   ├── config.ts             # infra config (db url, pool, model name)
 │   │   ├── db.ts                 # pg Pool + query helpers + ensureSchema()
@@ -106,6 +122,7 @@ dbos-agentic-platform/
 │       └── scan-and-fix/         # ⭐ a workflow module (vertical slice)
 │           ├── workflow.ts       # orchestration only (scan → policy → triage → persist)
 │           ├── steps/            # scan · triage · generateFix · createPr · persist
+│           ├── schema.sql        # tables owned by this workflow
 │           ├── schemas.ts        # Zod schemas for this workflow
 │           ├── routes.ts         # /workflow/scan, /workflow/findings
 │           ├── constants.ts      # workflow + queue names
