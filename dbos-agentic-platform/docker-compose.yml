@@ -67,4 +67,4 @@ networks:
   dbos-net:
 
 volumes:
-  dbos_pg_data:
+  dbos_pg_data:  # wipe with: docker compose --env-file .env.local down -v  (destroys all scan history)
