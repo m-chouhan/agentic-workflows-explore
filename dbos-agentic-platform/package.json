@@ -10,7 +10,13 @@
     "dev:server": "tsx watch src/server.ts",
     "start:worker": "node dist/src/worker.js",
     "start:server": "node dist/src/server.js",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "stack:up": "./scripts/run-local.sh",
+    "stack:up:rebuild": "./scripts/run-local.sh --rebuild",
+    "stack:down": "./scripts/stop-local.sh",
+    "stack:logs": "./scripts/logs.sh",
+    "e2e:bitbucket": "./scripts/e2e/test-bitbucket-pr-status.sh",
+    "e2e:scan": "./scripts/e2e/test-scan-and-fix.sh"
   },
   "dependencies": {
     "@ai-sdk/google": "^3.0.71",

@@ -36,6 +36,7 @@ services:
       GOOGLE_GENERATIVE_AI_API_KEY: ${GOOGLE_GENERATIVE_AI_API_KEY:-}
       GOOGLE_MODEL: ${GOOGLE_MODEL:-gemini-flash-latest}
       GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      BITBUCKET_TOKEN: ${BITBUCKET_TOKEN:-}
     networks:
       - dbos-net
 
