@@ -7,3 +7,4 @@ logs.txt
 # Docker artefacts
 *.tar
 deploy.tar.gz
+.DS_Store
