@@ -106,3 +106,96 @@ export async function getBuildStatus(repo: string, commitHash: string): Promise<
     : "NO_BUILD";
   return { state, key: latest.key, name: latest.name, url: latest.url };
 }
+
+// ── Pipelines API ──────────────────────────────────────────────────────────
+//
+// Bitbucket Pipelines: a triggered build has a `state` envelope and (when
+// completed) a nested `result`. Terminal states are SUCCESSFUL / FAILED /
+// STOPPED / ERROR; in-flight states are PENDING / IN_PROGRESS.
+
+export type BitbucketPipelineState =
+  | "PENDING"
+  | "IN_PROGRESS"
+  | "SUCCESSFUL"
+  | "FAILED"
+  | "STOPPED"
+  | "ERROR";
+
+export interface BitbucketPipeline {
+  uuid: string;            // includes braces from the API
+  buildNumber: number;
+  state: BitbucketPipelineState;
+  url: string;             // human-friendly URL on bitbucket.org
+}
+
+interface BbPipelineValue {
+  uuid?: string;
+  build_number?: number;
+  state?: { name?: string; result?: { name?: string } };
+  links?: { html?: { href?: string } };
+}
+
+async function bbPost<T>(pathAndQuery: string, body: unknown): Promise<T> {
+  const url = `${API_BASE}/${pathAndQuery}`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${getBitbucketToken()}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`Bitbucket API ${res.status} for ${url}: ${text.slice(0, 500)}`);
+  }
+  return (await res.json()) as T;
+}
+
+/** Normalise Bitbucket's nested state/result envelope into a flat state. */
+function flattenPipelineState(raw: BbPipelineValue): BitbucketPipelineState {
+  const stateName = raw.state?.name ?? "";
+  if (stateName === "COMPLETED") {
+    const result = raw.state?.result?.name ?? "";
+    if (result === "SUCCESSFUL" || result === "FAILED" || result === "STOPPED" || result === "ERROR") {
+      return result;
+    }
+    return "FAILED"; // unknown completed result — treat as failed
+  }
+  if (stateName === "IN_PROGRESS") return "IN_PROGRESS";
+  return "PENDING"; // PENDING, HALTED, or anything pre-running
+}
+
+function toPipeline(raw: BbPipelineValue): BitbucketPipeline {
+  return {
+    uuid: raw.uuid ?? "",
+    buildNumber: raw.build_number ?? 0,
+    state: flattenPipelineState(raw),
+    url: raw.links?.html?.href ?? "",
+  };
+}
+
+/** Trigger an on-demand pipeline for a branch (the PR's source branch). */
+export async function triggerPipelineForBranch(repo: string, branch: string): Promise<BitbucketPipeline> {
+  parseRepo(repo);
+  const raw = await bbPost<BbPipelineValue>(`${repo}/pipelines/`, {
+    target: { ref_type: "branch", type: "pipeline_ref_target", ref_name: branch },
+  });
+  return toPipeline(raw);
+}
+
+/** Get the current state of a pipeline by UUID (include braces, as returned by Bitbucket). */
+export async function getPipeline(repo: string, uuid: string): Promise<BitbucketPipeline> {
+  parseRepo(repo);
+  const encoded = encodeURIComponent(uuid);
+  const raw = await bbGet<BbPipelineValue>(`${repo}/pipelines/${encoded}`);
+  return toPipeline(raw);
+}
+
+const TERMINAL_PIPELINE_STATES = new Set<BitbucketPipelineState>([
+  "SUCCESSFUL", "FAILED", "STOPPED", "ERROR",
+]);
+
+export function isPipelineTerminal(state: BitbucketPipelineState): boolean {
+  return TERMINAL_PIPELINE_STATES.has(state);
+}
