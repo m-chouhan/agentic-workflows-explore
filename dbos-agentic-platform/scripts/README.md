@@ -44,7 +44,7 @@ TEST_REPO=myworkspace/myrepo POLL_TIMEOUT=300 npm run test:e2e
 ## Adding a new e2e test
 
 1. Create `src/workflows/<name>/<name>.e2e.test.ts`
-2. Import `requireServerUp`, `postJson`, `pollUntilDone` from `../../test-support/e2e`
+2. Import `requireServerUp`, `runWorkflow`, `E2E_TIMEOUT_MS` from `../../../test/support/e2e`
 3. Assert the durable path (enqueue → poll → SUCCESS + result invariants)
 
 See `src/workflows/bitbucket-pr-status/bitbucket-pr-status.e2e.test.ts` as the reference shape.

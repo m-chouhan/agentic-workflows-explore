@@ -75,18 +75,21 @@ src/workflows/platform-smoke/
 src/workflows/<name>/
   routes.int.test.ts         # integration (Supertest + mocked client)
   steps/<step>.unit.test.ts  # unit (pure logic, added later)
-src/test-support/e2e.ts      # shared e2e HTTP helpers (excluded from build)
+test/support/e2e.ts          # shared e2e HTTP helpers (outside src; excluded from build)
 ```
 
+Tests stay **co-located** with their workflow under `src/`; shared test-only helpers live
+outside the production tree in `test/` (no special-case build exclude needed for src).
+
 E2E suites replaced the old `scripts/e2e/*.sh`. The enqueue → poll → assert-SUCCESS protocol
-lives once in `src/test-support/e2e.ts` (`runWorkflow(path, payload)`).
+lives once in `test/support/e2e.ts` (`runWorkflow(path, payload)`).
 
 Coverage today: the `platformSmoke` e2e canary + `bitbucket-pr-status` route int tests.
 Unit tests are deferred while the platform is still being scaffolded — `jest.passWithNoTests`
 keeps the empty unit tier green. Add per-workflow int/unit suites as use-cases firm up.
 
-`src/test-support/` and all `*.test.ts` are excluded from the build (`tsconfig.json`); they are
-type-checked separately via `tsconfig.test.json`.
+The `test/` dir and all `*.test.ts` files are excluded from the build (`tsconfig.json`); they are
+type-checked separately via `tsconfig.test.json` (which includes both `src/` and `test/`).
 
 ## Install (run from an Artifactory-authenticated terminal)
 

@@ -7,7 +7,7 @@
 //
 // Requires `npm run stack:up` and BITBUCKET_TOKEN in the worker's .env.
 import { describe, it, expect, beforeAll, jest } from "@jest/globals";
-import { requireServerUp, runWorkflow, E2E_TIMEOUT_MS } from "../../test-support/e2e";
+import { requireServerUp, runWorkflow, E2E_TIMEOUT_MS } from "../../../test/support/e2e";
 
 const TEST_REPO = process.env.TEST_REPO ?? "atlassian/dt-proc";
 
