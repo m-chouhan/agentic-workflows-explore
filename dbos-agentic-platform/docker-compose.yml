@@ -26,17 +26,18 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    # App only ever reads .env. Select an environment by copying it into place first:
+    #   cp .env.local .env   (or .env.stg / .env.prod) before `docker compose up`.
+    env_file:
+      - .env
     environment:
+      # Container-internal overrides (postgres hostname differs from local dev).
       PGHOST: postgres
       PGPORT: 5432
       PGUSER: dbos
       PGPASSWORD: dbos
       PGDATABASE: dbos_platform
       DBOS_EXECUTOR_ID: worker-1
-      GOOGLE_GENERATIVE_AI_API_KEY: ${GOOGLE_GENERATIVE_AI_API_KEY:-}
-      GOOGLE_MODEL: ${GOOGLE_MODEL:-gemini-flash-latest}
-      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
-      BITBUCKET_TOKEN: ${BITBUCKET_TOKEN:-}
     networks:
       - dbos-net
 
@@ -49,7 +50,11 @@ services:
         condition: service_healthy
     ports:
       - "3002:3000"
+    # App only ever reads .env (see worker note above).
+    env_file:
+      - .env
     environment:
+      # Container-internal overrides (postgres hostname differs from local dev).
       PORT: 3000
       PGHOST: postgres
       PGPORT: 5432

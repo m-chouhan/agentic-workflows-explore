@@ -1,5 +1,5 @@
-import * as dotenv from "dotenv";
-dotenv.config();
+import { loadEnv } from "./platform/config";
+loadEnv();
 
 import { DBOS } from "@dbos-inc/dbos-sdk";
 import { ensureSchema } from "./platform/db";

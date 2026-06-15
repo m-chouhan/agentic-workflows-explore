@@ -1,5 +1,5 @@
-import * as dotenv from "dotenv";
-dotenv.config();
+import { loadEnv } from "./platform/config";
+loadEnv();
 
 import express from "express";
 import { ensureSchema } from "./platform/db";
