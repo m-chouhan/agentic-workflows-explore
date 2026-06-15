@@ -1,19 +1,30 @@
 # bitbucket-pr-autofix workflow
 
-Given a Bitbucket repo, finds the **first** open PR with a failing build and
-retriggers its pipeline. Deliberately minimal: one retrigger per run, logged so
-you can verify it landed on the right PR. No business table — the result is the
-workflow's return value, which DBOS persists and the GET endpoint serves.
+Finds failing Renovate PRs in a Bitbucket repo, asks Rovo Dev to triage each from
+its pipeline logs, and acts on the decision: **retrigger** the PR pipeline,
+**rebase** (via Rovo Dev), or **flag** for human review. No business table — the
+result is the workflow's return value, which DBOS persists and the GET endpoint serves.
 
-## Flow
+Scoped to **non-major** Renovate PRs (low/medium-risk patch/minor bumps), capped at
+`MAX_TRIAGE_PRS` per run. High-risk majors need code changes, not automation, so they're skipped.
+
+## Architecture — 3 phases, each a DBOS step
 
 ```
-bitbucketPrAutofix(repo)
-  ├─ step: find-first-failing-pr   list open PRs, return the first FAILED/STOPPED build
-  └─ step: retrigger               → POST /pipelines/ for that PR's source branch
+bitbucketPrAutofix(repo)                        index.ts = orchestration only
+  ├─ step "discover"          (1×)   steps/discover.ts  → list PRs + statuses, keep prs:-failing non-major Renovate
+  ├─ step "triage-{prId}"     (N×)   steps/triage.ts    → Rovo Dev reads logs → { decision, confidence, reason }
+  └─ step "act-{prId}"        (N×)   steps/act.ts       → retrigger | rebase | flag
 ```
 
-If no failing PR is found, it returns `triggered: false` and does nothing.
+Per-PR steps (not per-phase) are deliberate: each is the memoization/retry unit, so a
+crash mid-run resumes without re-calling Rovo Dev or re-firing a pipeline.
+
+## Requirements
+
+- `BITBUCKET_TOKEN` — list PRs, read statuses, trigger pipelines.
+- Rovo Dev serve mode running (`acli rovodev serve 4000`) + `ROVO_DEV_URL` / `ROVO_DEV_TOKEN`.
+  From the Docker worker use `http://host.docker.internal:4000`.
 
 ## HTTP API
 
@@ -27,34 +38,30 @@ GET  /workflow/pr-autofix/:id   poll status / result (from DBOS workflow state)
 ```jsonc
 {
   "repo": "atlassian/dt-proc",
-  "triggered": true,
-  "prId": 2022,
-  "sourceBranch": "renovate/minimatch-10.x",
-  "url": "https://bitbucket.org/atlassian/dt-proc/pull-requests/2022",
-  "pipelineUuid": "{94da6298-...}"
+  "evaluated": 4,
+  "outcomes": [
+    { "prId": 1953, "decision": "retrigger", "confidence": 0.9,  "reason": "...", "pipelineUuid": "{4407b9a0-...}", "rebaseOutput": null },
+    { "prId": 1342, "decision": "flag",      "confidence": 0.95, "reason": "...", "pipelineUuid": null, "rebaseOutput": null }
+  ]
 }
 ```
 
 ## Verifying a run
 
-The worker logs the PR before and after triggering:
-
-```
-[bb-autofix] retriggering PR #2022 (renovate/minimatch-10.x) https://bitbucket.org/...  buildState=FAILED
-[bb-autofix] ✓ triggered pipeline {94da6298-...} for PR #2022 (renovate/minimatch-10.x)
-```
-
 ```bash
 npm run stack:logs worker | grep bb-autofix
+# [bb-autofix] PR #1953 → retrigger (conf=0.9)  transient Artifactory 404, not a code issue
+# [bb-autofix] ✓ retriggered PR pipeline {4407b9a0-...} for PR #1953
+# [bb-autofix] ✓ done  evaluated=4  {"retrigger":2,"flag":2}
 ```
 
 ## Future evolution (NOT in this iteration)
 
-- Trigger all failing PRs (not just the first) and/or parallelise via `DBOS.startWorkflow`.
+- Confidence gate between triage and act (only act above a threshold).
 - Poll each retriggered pipeline to a terminal state and record the outcome.
-- A `pr_autofix_runs` projection table — add when you need "runs per repo" queries,
-  dashboards, or mid-run progress (DBOS output only exists once the workflow completes).
-- More recovery actions beyond retrigger (rebase, code-change via Rovo CLI).
+- Real `rebase` push (needs git write credentials, separate from `BITBUCKET_TOKEN`).
+- `flag` handoff to a PR comment / Slack / Jira (currently log-only).
+- Pagination — `listOpenPullRequests` fetches the first 50; dt-proc has ~95 open.
 
 ## Manual run
 

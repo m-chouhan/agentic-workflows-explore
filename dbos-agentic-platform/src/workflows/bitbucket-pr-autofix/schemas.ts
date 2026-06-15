@@ -1,16 +1,20 @@
-// Plain TS types. DBOS persists AutofixResult as the workflow output — no business table.
+// Workflow output contract. DBOS persists AutofixResult as the workflow result
+// (served by GET /workflow/pr-autofix/:id) — no business table.
 
-export type { TriageDecision } from "../../platform/rovodev";
+export interface PrOutcome {
+  prId: number;
+  title: string;
+  url: string;
+  decision: "retrigger" | "rebase" | "flag";
+  confidence: number;
+  reason: string;
+  pipelineUuid: string | null;  // set when decision=retrigger and trigger succeeded
+  rebaseOutput: string | null;  // set when decision=rebase (Rovo Dev response)
+}
 
 export interface AutofixResult {
   workflowId: string;
   repo: string;
-  prId: number | null;
-  title: string | null;
-  url: string | null;
-  decision: "retrigger" | "rebase" | "flag" | "no_failing_pr";
-  confidence: number | null;
-  reason: string | null;
-  pipelineUuid: string | null;  // set when decision=retrigger and trigger succeeded
-  rebaseOutput: string | null;  // set when decision=rebase (Rovo Dev response)
+  evaluated: number;
+  outcomes: PrOutcome[];
 }
