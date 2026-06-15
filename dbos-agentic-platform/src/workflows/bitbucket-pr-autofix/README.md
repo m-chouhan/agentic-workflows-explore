@@ -1,24 +1,25 @@
 # bitbucket-pr-autofix workflow
 
-Given a Bitbucket repo, finds open PRs with a failing build and retriggers their
-pipeline. Deliberately minimal: it fires the retrigger and records what it did —
-it does **not** wait for the new pipelines to finish.
+Given a Bitbucket repo, finds the **first** open PR with a failing build and
+retriggers its pipeline. Deliberately minimal: one retrigger per run, logged so
+you can verify it landed on the right PR. No business table — the result is the
+workflow's return value, which DBOS persists and the GET endpoint serves.
 
 ## Flow
 
 ```
 bitbucketPrAutofix(repo)
-  ├─ step: find-failing-prs   list open PRs, keep those whose build is FAILED/STOPPED
-  ├─ for each failing PR:
-  │    └─ step: retrigger-{prId}  → POST /pipelines/ (Bitbucket Pipelines API)
-  └─ step: persist            one pr_autofix_runs row
+  ├─ step: find-first-failing-pr   list open PRs, return the first FAILED/STOPPED build
+  └─ step: retrigger               → POST /pipelines/ for that PR's source branch
 ```
+
+If no failing PR is found, it returns `triggered: false` and does nothing.
 
 ## HTTP API
 
 ```
 POST /workflow/pr-autofix       { "repo": "workspace/slug" }   → 202 ENQUEUED
-GET  /workflow/pr-autofix/:id   poll status / result
+GET  /workflow/pr-autofix/:id   poll status / result (from DBOS workflow state)
 ```
 
 ## Result
@@ -26,24 +27,34 @@ GET  /workflow/pr-autofix/:id   poll status / result
 ```jsonc
 {
   "repo": "atlassian/dt-proc",
-  "totalFailing": 3,
-  "triggered": 3,            // retriggers that succeeded
-  "retriggers": [ { "prId": 12, "sourceBranch": "...", "pipelineUuid": "...", "triggered": true, "error": null } ],
-  "status": "completed"
+  "triggered": true,
+  "prId": 2022,
+  "sourceBranch": "renovate/minimatch-10.x",
+  "url": "https://bitbucket.org/atlassian/dt-proc/pull-requests/2022",
+  "pipelineUuid": "{94da6298-...}"
 }
 ```
 
-## Persistence
+## Verifying a run
 
-`pr_autofix_runs` — one row per workflow (totals + the `retriggers_json` array), upserted on
-`workflow_id` so the workflow is safe to replay.
+The worker logs the PR before and after triggering:
+
+```
+[bb-autofix] retriggering PR #2022 (renovate/minimatch-10.x) https://bitbucket.org/...  buildState=FAILED
+[bb-autofix] ✓ triggered pipeline {94da6298-...} for PR #2022 (renovate/minimatch-10.x)
+```
+
+```bash
+npm run stack:logs worker | grep bb-autofix
+```
 
 ## Future evolution (NOT in this iteration)
 
+- Trigger all failing PRs (not just the first) and/or parallelise via `DBOS.startWorkflow`.
 - Poll each retriggered pipeline to a terminal state and record the outcome.
+- A `pr_autofix_runs` projection table — add when you need "runs per repo" queries,
+  dashboards, or mid-run progress (DBOS output only exists once the workflow completes).
 - More recovery actions beyond retrigger (rebase, code-change via Rovo CLI).
-- Reuse failing PRs from a prior `bitbucketPrStatus` run instead of re-discovering.
-- Parallelise per-PR work via `DBOS.startWorkflow` onto a bounded-concurrency queue.
 
 ## Manual run
 

@@ -9,13 +9,23 @@ import { workflowModules } from "./workflows";
 const PORT = parseInt(process.env.PORT ?? "3000", 10);
 
 async function main(): Promise<void> {
-  await ensureSchema(workflowModules.map((m) => m.schemaPath));
+  await ensureSchema(workflowModules.flatMap((m) => (m.schemaPath ? [m.schemaPath] : [])));
 
   const client = await createDbosClient();
   console.log("[server] DBOSClient connected");
 
   const app = express();
   app.use(express.json());
+
+  // Log each request once the response is sent (skip /healthz noise).
+  app.use((req, res, next) => {
+    if (req.path === "/healthz") return next();
+    const start = Date.now();
+    res.on("finish", () => {
+      console.log(`[server] ${req.method} ${req.originalUrl} → ${res.statusCode} (${Date.now() - start}ms)`);
+    });
+    next();
+  });
 
   app.get("/healthz", (_req, res) => res.json({ ok: true, ts: new Date().toISOString() }));
 

@@ -7,7 +7,7 @@ import { launchWorker } from "./platform/dbos";
 import { workflowModules } from "./workflows";
 
 async function main(): Promise<void> {
-  await ensureSchema(workflowModules.map((m) => m.schemaPath));
+  await ensureSchema(workflowModules.flatMap((m) => (m.schemaPath ? [m.schemaPath] : [])));
   for (const m of workflowModules) m.register(); // must happen before DBOS.launch()
 
   await launchWorker(workflowModules.map((m) => m.queueName));

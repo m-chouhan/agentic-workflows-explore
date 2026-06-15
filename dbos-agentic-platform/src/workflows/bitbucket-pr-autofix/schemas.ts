@@ -1,21 +1,11 @@
-// Plain TS types — this workflow is a deterministic discover-and-retrigger pass.
-
-export interface Retrigger {
-  prId: number;
-  url: string;
-  sourceBranch: string;
-  buildState: string;          // the failing state we observed
-  pipelineUuid: string | null; // set when the retrigger succeeds
-  pipelineUrl: string | null;
-  triggered: boolean;
-  error: string | null;
-}
+// Plain TS type. DBOS persists this as the workflow output — no business table.
 
 export interface AutofixResult {
   workflowId: string;
   repo: string;
-  totalFailing: number;
-  triggered: number;           // how many retriggers succeeded
-  retriggers: Retrigger[];
-  status: "completed";
+  triggered: boolean;          // false when no failing PR was found
+  prId: number | null;
+  sourceBranch: string | null;
+  url: string | null;
+  pipelineUuid: string | null;
 }

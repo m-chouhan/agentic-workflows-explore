@@ -1,69 +1,56 @@
-import * as path from "path";
 import { DBOS } from "@dbos-inc/dbos-sdk";
 import type { WorkflowModule } from "../../platform/types";
 import { listOpenPullRequests, getBuildStatus, triggerPipelineForBranch } from "../../platform/bitbucket";
 import { buildPrAutofixRouter } from "./routes";
 import { QUEUE_NAME, WORKFLOW_NAME, FAILED_BUILD_STATES } from "./constants";
-import { writeAutofixRun } from "./steps/persist";
-import type { AutofixResult, Retrigger } from "./schemas";
+import type { AutofixResult } from "./schemas";
 
-async function findFailingPrs(repo: string): Promise<Retrigger[]> {
+interface FailingPr {
+  prId: number;
+  url: string;
+  sourceBranch: string;
+  buildState: string;
+}
+
+async function findFirstFailingPr(repo: string): Promise<FailingPr | null> {
   const prs = await listOpenPullRequests(repo);
-  const failing: Retrigger[] = [];
   for (const pr of prs) {
     const build = await getBuildStatus(repo, pr.commitHash);
     if (FAILED_BUILD_STATES.has(build.state)) {
-      failing.push({
-        prId: pr.id,
-        url: pr.url,
-        sourceBranch: pr.sourceBranch,
-        buildState: build.state,
-        pipelineUuid: null,
-        pipelineUrl: null,
-        triggered: false,
-        error: null,
-      });
+      return { prId: pr.id, url: pr.url, sourceBranch: pr.sourceBranch, buildState: build.state };
     }
   }
-  return failing;
+  return null;
 }
 
 async function bitbucketPrAutofix(repo: string): Promise<AutofixResult> {
   const workflowId = DBOS.workflowID ?? `pr-autofix-${Date.now()}`;
   DBOS.logger.info(`[bb-autofix] ▶ bitbucketPrAutofix(${repo})  wfId=${workflowId}`);
 
-  const failing = await DBOS.runStep(() => findFailingPrs(repo), { name: "find-failing-prs" });
-  DBOS.logger.info(`[bb-autofix] ${failing.length} failing PRs`);
+  const pr = await DBOS.runStep(() => findFirstFailingPr(repo), { name: "find-first-failing-pr" });
 
-  for (const pr of failing) {
-    try {
-      const pipeline = await DBOS.runStep(
-        () => triggerPipelineForBranch(repo, pr.sourceBranch),
-        { name: `retrigger-${pr.prId}`, retriesAllowed: true, maxAttempts: 2, intervalSeconds: 3, backoffRate: 1 },
-      );
-      pr.pipelineUuid = pipeline.uuid;
-      pr.pipelineUrl = pipeline.url;
-      pr.triggered = true;
-    } catch (err) {
-      pr.error = (err as Error).message;
-    }
+  if (!pr) {
+    DBOS.logger.info(`[bb-autofix] no failing PRs in ${repo} — nothing to retrigger`);
+    return { workflowId, repo, triggered: false, prId: null, sourceBranch: null, url: null, pipelineUuid: null };
   }
 
-  const triggered = failing.filter((p) => p.triggered).length;
+  DBOS.logger.info(`[bb-autofix] retriggering PR #${pr.prId} (${pr.sourceBranch}) ${pr.url}  buildState=${pr.buildState}`);
 
-  await DBOS.runStep(
-    () => writeAutofixRun(workflowId, repo, failing.length, triggered, failing),
-    { name: "persist" },
+  const pipeline = await DBOS.runStep(
+    () => triggerPipelineForBranch(repo, pr.sourceBranch),
+    { name: "retrigger", retriesAllowed: true, maxAttempts: 2, intervalSeconds: 3, backoffRate: 1 },
   );
 
-  DBOS.logger.info(`[bb-autofix] ✓ done  wfId=${workflowId}  failing=${failing.length}  triggered=${triggered}`);
+  DBOS.logger.info(`[bb-autofix] ✓ triggered pipeline ${pipeline.uuid} for PR #${pr.prId} (${pr.sourceBranch})`);
+
   return {
     workflowId,
     repo,
-    totalFailing: failing.length,
-    triggered,
-    retriggers: failing,
-    status: "completed",
+    triggered: true,
+    prId: pr.prId,
+    sourceBranch: pr.sourceBranch,
+    url: pr.url,
+    pipelineUuid: pipeline.uuid,
   };
 }
 
@@ -72,7 +59,6 @@ const bitbucketPrAutofixWorkflow = DBOS.registerWorkflow(bitbucketPrAutofix, { n
 export const bitbucketPrAutofixModule: WorkflowModule = {
   name: WORKFLOW_NAME,
   queueName: QUEUE_NAME,
-  schemaPath: path.join(__dirname, "schema.sql"),
   buildRouter: buildPrAutofixRouter,
   register: () => { void bitbucketPrAutofixWorkflow; },
 };
