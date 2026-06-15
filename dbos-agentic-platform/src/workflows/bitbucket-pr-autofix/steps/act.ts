@@ -1,3 +1,4 @@
+import { DBOS } from "@dbos-inc/dbos-sdk";
 import { triggerPrPipeline } from "../../../platform/bitbucket";
 import { rebasePr } from "../../../platform/rovodev";
 import type { TriageDecision } from "../../../platform/rovodev";
@@ -23,10 +24,14 @@ export async function actOnPr(
       commitHash: pr.commitHash, destCommitHash: pr.destCommitHash,
     });
     outcome.pipelineUuid = pipeline.uuid;
+    DBOS.logger.info(`[bb-autofix] PR #${pr.prId} → triggered build #${pipeline.buildNumber} (${pipeline.url})`);
   } else if (decision.decision === "rebase") {
     outcome.rebaseOutput = await rebasePr({
       repo, prId: pr.prId, sourceBranch: pr.sourceBranch, destBranch: pr.destBranch,
     });
+    DBOS.logger.info(`[bb-autofix] PR #${pr.prId} → rebase requested`);
+  } else {
+    DBOS.logger.info(`[bb-autofix] PR #${pr.prId} → flagged, no action`);
   }
 
   return outcome;

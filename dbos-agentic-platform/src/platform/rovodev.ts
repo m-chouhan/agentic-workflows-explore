@@ -32,25 +32,60 @@ async function resetRovoDev(): Promise<void> {
   if (!res.ok) throw new Error(`Rovo Dev reset failed: ${res.status}`);
 }
 
-/** Consume the SSE stream from /v2/chat and reassemble all text content. */
+/**
+ * Consume the SSE stream from /v2/chat and reassemble all text content.
+ *
+ * SSE frames are separated by blank lines and a single logical `data:` value can
+ * span multiple physical lines. Splitting on "\n" and matching line-by-line drops
+ * those continuation lines, which truncated the front of the model's reply. We
+ * instead split into frames (blank-line separated) and join each frame's data lines.
+ */
 async function consumeSSE(res: Response): Promise<string> {
   const raw = await res.text();
   let content = "";
-  for (const line of raw.split("\n")) {
-    if (!line.startsWith("data:")) continue;
+  for (const frame of raw.split(/\n\n/)) {
+    const data = frame
+      .split("\n")
+      .filter((l) => l.startsWith("data:"))
+      .map((l) => l.slice(5).replace(/^ /, ""))
+      .join("\n");
+    if (!data) continue;
     try {
-      const d = JSON.parse(line.slice(5));
+      const d = JSON.parse(data);
       if (d.event_kind === "part_delta") content += d.delta?.content_delta ?? "";
-    } catch { /* skip malformed lines */ }
+    } catch { /* skip non-JSON frames (e.g. heartbeats) */ }
   }
   return content;
 }
 
-/** Extract the first JSON object from Rovo Dev prose output. */
-function extractJson(text: string): unknown {
-  const match = text.match(/\{[\s\S]*\}/);
-  if (!match) throw new Error(`No JSON found in Rovo Dev response. Raw:\n${text.slice(0, 500)}`);
-  return JSON.parse(match[0]);
+/**
+ * Parse a TriageDecision from Rovo Dev output. Tries strict JSON first (stripping
+ * code fences / prose), then salvages individual fields by key so a slightly
+ * malformed reply still yields a usable decision instead of crashing the workflow.
+ */
+function parseDecision(text: string): TriageDecision {
+  const cleaned = text.replace(/```(?:json)?/gi, "").trim();
+
+  const braced = cleaned.match(/\{[\s\S]*\}/);
+  if (braced) {
+    try { return JSON.parse(braced[0]) as TriageDecision; } catch { /* salvage below */ }
+  }
+
+  // Field-level salvage: match each key's value directly. `field` captures a quoted
+  // string allowing escaped chars; works even if the JSON envelope is malformed.
+  const field = (key: string) =>
+    cleaned.match(new RegExp(`"${key}"\\s*:\\s*"((?:[^"\\\\]|\\\\.)*)"`))?.[1];
+  const decision = cleaned
+    .match(/"?decision"?\s*:\s*"?(retrigger|rebase|flag)"?/i)?.[1]
+    ?.toLowerCase() as TriageDecision["decision"] | undefined;
+  const confidence = cleaned.match(/"confidence"\s*:\s*([0-9.]+)/)?.[1];
+
+  return {
+    decision: decision ?? "flag",  // unparseable → default to the safe (no-op) action
+    confidence: confidence ? Number(confidence) : 0,
+    reason: field("reason") ?? `could not parse Rovo Dev reply: ${cleaned.slice(0, 200)}`,
+    action_hint: field("action_hint") ?? "",
+  };
 }
 
 /**
@@ -75,28 +110,38 @@ export async function triagePr(params: {
   title: string;
   sourceBranch: string;
   destBranch: string;
-  commitHash: string;
   failingStatusKey: string;
 }): Promise<TriageDecision> {
-  const prompt = `Analyze this failing Bitbucket PR and decide what action to take.
+  const prompt = `You are triaging a failing Renovate dependency-bump PR in Bitbucket. Decide ONE action.
 
 Repo: ${params.repo}
 PR #${params.prId}: ${params.title}
 Branch: ${params.sourceBranch} → ${params.destBranch}
-Head commit: ${params.commitHash}
 Failing pipeline status key: ${params.failingStatusKey}
 
-Fetch the pipeline steps and logs for the most recent failed pipeline on branch ${params.sourceBranch}.
-Based on the actual failure reason, decide:
-  - retrigger: flaky CI, re-running the pipeline should pass
-  - rebase: the branch is behind ${params.destBranch} and picking up recent changes should fix it
-  - flag: needs human or deeper intervention (broken binary, real test failure, etc.)
+Investigate before deciding: look at the failing pipeline's steps and logs for branch
+${params.sourceBranch}. Identify which STEP actually failed and anchor on its real error
+(other steps may have passed — ignore noise from steps that succeeded). If you can, also
+check how many times this pipeline has already failed for this PR.
+
+Decide:
+  - retrigger: a genuinely TRANSIENT failure (one-off network blip, runner timeout) that
+    a fresh run would clear.
+  - rebase: the branch is behind ${params.destBranch} and picking up recent changes fixes it.
+  - flag: a DETERMINISTIC failure re-running won't fix (compile/type errors, real test
+    failures, an unresolvable/forbidden dependency, config/infra validation).
+
+Guidance:
+  - A failure that has already reproduced across multiple runs is NOT transient — flag it.
+  - Recurring package-registry errors (e.g. HTTP 404 "Package not found") are an
+    auth/availability problem, NOT transient — flag, do not retrigger.
+  - Only choose retrigger when you can name a specific transient cause.
 
 Reply with ONLY a JSON object — no prose before or after:
 {"decision":"retrigger|rebase|flag","confidence":<0-1>,"reason":"<one sentence>","action_hint":"<what to do>"}`;
 
   const text = await askRovoDev(prompt);
-  return extractJson(text) as TriageDecision;
+  return parseDecision(text);
 }
 
 /** Ask Rovo Dev to rebase a branch onto its destination. Returns the response text for logging. */
