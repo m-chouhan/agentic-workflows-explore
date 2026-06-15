@@ -219,19 +219,10 @@ function toPipeline(raw: BbPipelineValue): BitbucketPipeline {
   };
 }
 
-/** Trigger the default/branch pipeline for a branch. */
-export async function triggerPipelineForBranch(repo: string, branch: string): Promise<BitbucketPipeline> {
-  parseRepo(repo);
-  const raw = await bbPost<BbPipelineValue>(`${repo}/pipelines/`, {
-    target: { ref_type: "branch", type: "pipeline_ref_target", ref_name: branch },
-  });
-  return toPipeline(raw);
-}
-
 /**
  * Trigger the pull-request pipeline for a PR — the pipeline definition whose status
- * key is `prs:*` and which actually gates the PR merge. This is the correct retrigger
- * for a failing PR, not triggerPipelineForBranch (which runs the default pipeline).
+ * key is `prs:*` and which actually gates the PR merge (a branch/default pipeline
+ * trigger would run a different definition and leave the PR check red).
  *
  * The `pipeline_pullrequest_target` type is undocumented in the OpenAPI spec but
  * verified to work (HTTP 201). See knowledge/renovate-autofix-spike_20260615.md.
@@ -253,20 +244,4 @@ export async function triggerPrPipeline(
     },
   });
   return toPipeline(raw);
-}
-
-/** Get the current state of a pipeline by UUID (include braces, as returned by Bitbucket). */
-export async function getPipeline(repo: string, uuid: string): Promise<BitbucketPipeline> {
-  parseRepo(repo);
-  const encoded = encodeURIComponent(uuid);
-  const raw = await bbGet<BbPipelineValue>(`${repo}/pipelines/${encoded}`);
-  return toPipeline(raw);
-}
-
-const TERMINAL_PIPELINE_STATES = new Set<BitbucketPipelineState>([
-  "SUCCESSFUL", "FAILED", "STOPPED", "ERROR",
-]);
-
-export function isPipelineTerminal(state: BitbucketPipelineState): boolean {
-  return TERMINAL_PIPELINE_STATES.has(state);
 }

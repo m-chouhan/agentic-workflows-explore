@@ -26,8 +26,8 @@ function authHeader() {
   return { Authorization: `Bearer ${getRovoDevToken()}` };
 }
 
-/** Reset the Rovo Dev session. Call before each new PR so context from a prior run doesn't bleed. */
-export async function resetRovoDev(): Promise<void> {
+/** Reset the Rovo Dev session so context from a prior run doesn't bleed into the next. */
+async function resetRovoDev(): Promise<void> {
   const res = await fetch(`${getRovoDevBase()}/v2/reset`, { method: "POST", headers: authHeader() });
   if (!res.ok) throw new Error(`Rovo Dev reset failed: ${res.status}`);
 }
@@ -57,7 +57,7 @@ function extractJson(text: string): unknown {
  * Send a prompt to the running Rovo Dev serve instance and return the response text.
  * Resets session first so prior conversation context doesn't affect the result.
  */
-export async function askRovoDev(prompt: string): Promise<string> {
+async function askRovoDev(prompt: string): Promise<string> {
   await resetRovoDev();
   const res = await fetch(`${getRovoDevBase()}/v2/chat`, {
     method: "POST",
@@ -96,7 +96,6 @@ Reply with ONLY a JSON object — no prose before or after:
 {"decision":"retrigger|rebase|flag","confidence":<0-1>,"reason":"<one sentence>","action_hint":"<what to do>"}`;
 
   const text = await askRovoDev(prompt);
-  console.log(`[rovodev] triage response for PR #${params.prId}:\n${text}`);
   return extractJson(text) as TriageDecision;
 }
 
