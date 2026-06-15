@@ -7,7 +7,8 @@ export interface BitbucketPullRequest {
   author: string;
   sourceBranch: string;
   destBranch: string;
-  commitHash: string;
+  commitHash: string;     // PR head (source) commit hash
+  destCommitHash: string; // destination branch head hash (needed for pipeline_pullrequest_target)
   createdOn: string;
   updatedOn: string;
   url: string;
@@ -57,7 +58,7 @@ interface BbPrValue {
   title?: string;
   author?: { display_name?: string };
   source?: { branch?: { name?: string }; commit?: { hash?: string } };
-  destination?: { branch?: { name?: string } };
+  destination?: { branch?: { name?: string }; commit?: { hash?: string } };
   created_on?: string;
   updated_on?: string;
   links?: { html?: { href?: string } };
@@ -71,6 +72,7 @@ function toPullRequest(pr: BbPrValue): BitbucketPullRequest {
     sourceBranch: pr.source?.branch?.name ?? "unknown",
     destBranch: pr.destination?.branch?.name ?? "unknown",
     commitHash: pr.source?.commit?.hash ?? "",
+    destCommitHash: pr.destination?.commit?.hash ?? "",
     createdOn: pr.created_on?.slice(0, 10) ?? "",
     updatedOn: pr.updated_on?.slice(0, 10) ?? "",
     url: pr.links?.html?.href ?? "",
@@ -101,6 +103,10 @@ export async function listOpenPullRequests(repo: string): Promise<BitbucketPullR
   return listPullRequests(repo, { state: "OPEN", limit: 50 });
 }
 
+const VALID_BUILD_STATES = new Set<BitbucketBuildStatus["state"]>([
+  "SUCCESSFUL", "FAILED", "INPROGRESS", "STOPPED",
+]);
+
 interface BbStatusValue {
   state?: string;
   key?: string;
@@ -108,22 +114,41 @@ interface BbStatusValue {
   url?: string;
 }
 
-/** Latest build status for a commit. Returns NO_BUILD if none / no commit. */
-export async function getBuildStatus(repo: string, commitHash: string): Promise<BitbucketBuildStatus> {
-  if (!commitHash) return { state: "NO_BUILD" };
+function toBuildStatus(raw: BbStatusValue): BitbucketBuildStatus {
+  const state = VALID_BUILD_STATES.has(raw.state as BitbucketBuildStatus["state"])
+    ? (raw.state as BitbucketBuildStatus["state"])
+    : "NO_BUILD";
+  return { state, key: raw.key, name: raw.name, url: raw.url };
+}
+
+/**
+ * All build statuses for a commit — one entry per pipeline definition
+ * (e.g. prs:**:master, default, custom:trust-greenlight-pipeline).
+ * Returns [] when commitHash is empty or no statuses exist.
+ */
+export async function getPrBuildStatuses(
+  repo: string,
+  commitHash: string,
+): Promise<BitbucketBuildStatus[]> {
+  if (!commitHash) return [];
   parseRepo(repo);
   const data = await bbGet<{ values?: BbStatusValue[] }>(
-    `${repo}/commit/${commitHash}/statuses?pagelen=10`,
+    `${repo}/commit/${commitHash}/statuses?pagelen=50`,
   );
-  const latest = (data.values ?? [])[0];
-  if (!latest) return { state: "NO_BUILD" };
-  const validStates: BitbucketBuildStatus["state"][] = [
-    "SUCCESSFUL", "FAILED", "INPROGRESS", "STOPPED",
-  ];
-  const state = validStates.includes(latest.state as BitbucketBuildStatus["state"])
-    ? (latest.state as BitbucketBuildStatus["state"])
-    : "NO_BUILD";
-  return { state, key: latest.key, name: latest.name, url: latest.url };
+  return (data.values ?? []).map(toBuildStatus);
+}
+
+/**
+ * Worst build status for a commit: prefers the prs: pipeline (the gate that
+ * blocks a PR merge) over other definitions; falls back to any FAILED/STOPPED,
+ * then the first status, then NO_BUILD.
+ */
+export async function getBuildStatus(repo: string, commitHash: string): Promise<BitbucketBuildStatus> {
+  const all = await getPrBuildStatuses(repo, commitHash);
+  if (all.length === 0) return { state: "NO_BUILD" };
+  const prPipeline = all.find((s) => s.key?.startsWith("prs:"));
+  if (prPipeline) return prPipeline;
+  return all.find((s) => s.state === "FAILED" || s.state === "STOPPED") ?? all[0];
 }
 
 // ── Pipelines API ──────────────────────────────────────────────────────────
@@ -194,11 +219,38 @@ function toPipeline(raw: BbPipelineValue): BitbucketPipeline {
   };
 }
 
-/** Trigger an on-demand pipeline for a branch (the PR's source branch). */
+/** Trigger the default/branch pipeline for a branch. */
 export async function triggerPipelineForBranch(repo: string, branch: string): Promise<BitbucketPipeline> {
   parseRepo(repo);
   const raw = await bbPost<BbPipelineValue>(`${repo}/pipelines/`, {
     target: { ref_type: "branch", type: "pipeline_ref_target", ref_name: branch },
+  });
+  return toPipeline(raw);
+}
+
+/**
+ * Trigger the pull-request pipeline for a PR — the pipeline definition whose status
+ * key is `prs:*` and which actually gates the PR merge. This is the correct retrigger
+ * for a failing PR, not triggerPipelineForBranch (which runs the default pipeline).
+ *
+ * The `pipeline_pullrequest_target` type is undocumented in the OpenAPI spec but
+ * verified to work (HTTP 201). See knowledge/renovate-autofix-spike_20260615.md.
+ */
+export async function triggerPrPipeline(
+  repo: string,
+  pr: { id: number; sourceBranch: string; destBranch: string; commitHash: string; destCommitHash: string },
+): Promise<BitbucketPipeline> {
+  parseRepo(repo);
+  const raw = await bbPost<BbPipelineValue>(`${repo}/pipelines/`, {
+    target: {
+      type: "pipeline_pullrequest_target",
+      source: pr.sourceBranch,
+      destination: pr.destBranch,
+      destination_commit: { hash: pr.destCommitHash },
+      commit: { hash: pr.commitHash },
+      pullrequest: { id: pr.id },         // ⚠ one word, id as number
+      selector: { type: "pull-requests", pattern: "**" },
+    },
   });
   return toPipeline(raw);
 }
