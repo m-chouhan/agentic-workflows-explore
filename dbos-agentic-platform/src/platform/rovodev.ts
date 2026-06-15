@@ -2,13 +2,19 @@
 // Requires `acli rovodev serve <port>` running on the host before the workflow starts.
 // ROVO_DEV_URL  — e.g. http://host.docker.internal:4000  (Docker) or http://localhost:4000
 // ROVO_DEV_TOKEN — bearer token printed by `acli rovodev serve` on startup
+import { z } from "zod";
 
-export interface TriageDecision {
-  decision: "retrigger" | "rebase" | "flag";
-  confidence: number;
-  reason: string;
-  action_hint: string;
-}
+// Schema is the single source of truth for a triage decision. `.catch()` per field
+// makes parsing total: any missing/invalid value falls back to a safe default
+// (decision → "flag", the no-op action) instead of throwing and failing the workflow.
+const TriageDecisionSchema = z.object({
+  decision: z.enum(["retrigger", "rebase", "flag"]).catch("flag"),
+  confidence: z.number().min(0).max(1).catch(0),
+  reason: z.string().catch(""),
+  action_hint: z.string().catch(""),
+});
+
+export type TriageDecision = z.infer<typeof TriageDecisionSchema>;
 
 function getRovoDevBase(): string {
   const url = process.env.ROVO_DEV_URL;
@@ -33,19 +39,19 @@ async function resetRovoDev(): Promise<void> {
 }
 
 /**
- * Consume the SSE stream from /v2/chat and reassemble all text content.
+ * Consume the SSE stream from /v2/chat and reassemble the model's text content.
  *
- * SSE frames are separated by blank lines and a single logical `data:` value can
- * span multiple physical lines. Splitting on "\n" and matching line-by-line drops
- * those continuation lines, which truncated the front of the model's reply. We
- * instead split into frames (blank-line separated) and join each frame's data lines.
+ * SSE frames are blank-line separated and a single logical `data:` value can span
+ * multiple physical lines, so we parse per-frame (joining its data lines) rather
+ * than line-by-line — line-by-line dropped continuation lines and truncated the
+ * front of the reply.
  */
 async function consumeSSE(res: Response): Promise<string> {
   const raw = await res.text();
   let content = "";
-  for (const frame of raw.split(/\n\n/)) {
+  for (const frame of raw.split(/\r?\n\r?\n/)) {
     const data = frame
-      .split("\n")
+      .split(/\r?\n/)
       .filter((l) => l.startsWith("data:"))
       .map((l) => l.slice(5).replace(/^ /, ""))
       .join("\n");
@@ -59,33 +65,17 @@ async function consumeSSE(res: Response): Promise<string> {
 }
 
 /**
- * Parse a TriageDecision from Rovo Dev output. Tries strict JSON first (stripping
- * code fences / prose), then salvages individual fields by key so a slightly
- * malformed reply still yields a usable decision instead of crashing the workflow.
+ * Parse a TriageDecision from Rovo Dev output: pull the first {...} block (ignoring
+ * any surrounding prose or code fences) and validate it against the schema, whose
+ * per-field `.catch()` supplies safe defaults for anything missing or invalid.
  */
 function parseDecision(text: string): TriageDecision {
-  const cleaned = text.replace(/```(?:json)?/gi, "").trim();
-
-  const braced = cleaned.match(/\{[\s\S]*\}/);
-  if (braced) {
-    try { return JSON.parse(braced[0]) as TriageDecision; } catch { /* salvage below */ }
+  const json = text.match(/\{[\s\S]*\}/)?.[0];
+  try {
+    return TriageDecisionSchema.parse(json ? JSON.parse(json) : {});
+  } catch {
+    return TriageDecisionSchema.parse({});  // no/invalid JSON → all safe defaults
   }
-
-  // Field-level salvage: match each key's value directly. `field` captures a quoted
-  // string allowing escaped chars; works even if the JSON envelope is malformed.
-  const field = (key: string) =>
-    cleaned.match(new RegExp(`"${key}"\\s*:\\s*"((?:[^"\\\\]|\\\\.)*)"`))?.[1];
-  const decision = cleaned
-    .match(/"?decision"?\s*:\s*"?(retrigger|rebase|flag)"?/i)?.[1]
-    ?.toLowerCase() as TriageDecision["decision"] | undefined;
-  const confidence = cleaned.match(/"confidence"\s*:\s*([0-9.]+)/)?.[1];
-
-  return {
-    decision: decision ?? "flag",  // unparseable → default to the safe (no-op) action
-    confidence: confidence ? Number(confidence) : 0,
-    reason: field("reason") ?? `could not parse Rovo Dev reply: ${cleaned.slice(0, 200)}`,
-    action_hint: field("action_hint") ?? "",
-  };
 }
 
 /**

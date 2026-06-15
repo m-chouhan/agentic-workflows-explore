@@ -5,4 +5,4 @@ export const WORKFLOW_NAME = "bitbucketPrAutofix";
 export const FAILED_BUILD_STATES = new Set(["FAILED", "STOPPED"]);
 
 // Max failing PRs to triage per run.
-export const MAX_TRIAGE_PRS = 10;
+export const MAX_TRIAGE_PRS = 4;
