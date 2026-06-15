@@ -25,27 +25,34 @@ Scan repo → policy check → LLM triage → LLM fix generation → GitHub PR c
 - **Postgres** holds both DBOS system state and business data (single database)
 - **Agents** use `generateText` + Zod structured output for type-safe LLM responses
 
+## Environment config
+
+The app reads a **single `.env` file** — it has no knowledge of `.env.local`/`.env.stg`/
+`.env.prod`. Selecting an environment is an ops step: keep per-environment files
+(gitignored) and copy the one you want into place before starting.
+
+```bash
+cp .env.example .env      # then fill in real secrets
+# or, if you keep a self-contained local file:
+cp .env.local  .env       # cp .env.stg .env / cp .env.prod .env for other envs
+```
+
+Required: `GOOGLE_GENERATIVE_AI_API_KEY` · `BITBUCKET_TOKEN` (for Bitbucket workflows).
+Optional: `GITHUB_TOKEN` (enables PR creation; needs `repo` scope). The worker fails
+loudly if a required key is missing.
+
 ## Quick Start (Docker)
 
 ```bash
-# 1. Configure — copy the example and set your keys
-cp .env.local.example .env.local
-# Required: GOOGLE_GENERATIVE_AI_API_KEY  (https://aistudio.google.com/app/apikey)
-# Optional: GITHUB_TOKEN                  (enables PR creation; needs 'repo' scope)
+cp .env.example .env       # fill in keys (see Environment config above)
 
-# ⚠ Make sure the key is set before starting — the worker will fail loudly otherwise.
+# Start the stack (builds image on first run)
+docker compose up --build -d
 
-# 2. Start the stack (builds image on first run)
-docker compose --env-file .env.local up --build -d
-
-# Follow logs
-docker compose --env-file .env.local logs -f
-
-# Stop
-docker compose --env-file .env.local down
-
-# Full reset (wipes DB volume)
-docker compose --env-file .env.local down -v
+# Follow logs / stop / full reset (wipes DB volume)
+docker compose logs -f
+docker compose down
+docker compose down -v
 ```
 
 Schema is applied automatically on boot. API is available at `http://localhost:3002`.
@@ -54,7 +61,7 @@ Schema is applied automatically on boot. API is available at `http://localhost:3
 
 ```bash
 npm install
-cp .env.local.example .env.local   # fill in keys
+cp .env.example .env       # fill in keys
 
 # Run Postgres only via Docker
 docker compose up postgres -d
