@@ -10,13 +10,16 @@
     "dev:server": "tsx watch src/server.ts",
     "start:worker": "node dist/src/worker.js",
     "start:server": "node dist/src/server.js",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.test.json",
+    "test": "jest --selectProjects unit int",
+    "test:watch": "jest --selectProjects unit --watch",
+    "test:cov": "jest --selectProjects unit int --coverage",
+    "test:e2e": "jest --selectProjects e2e",
+    "test:all": "jest",
     "stack:up": "./scripts/run-local.sh",
     "stack:up:rebuild": "./scripts/run-local.sh --rebuild",
     "stack:down": "./scripts/stop-local.sh",
-    "stack:logs": "./scripts/logs.sh",
-    "e2e:bitbucket": "./scripts/e2e/test-bitbucket-pr-status.sh",
-    "e2e:scan": "./scripts/e2e/test-scan-and-fix.sh"
+    "stack:logs": "./scripts/logs.sh"
   },
   "dependencies": {
     "@ai-sdk/google": "^3.0.71",
@@ -30,10 +33,17 @@
     "zod": "^3.23.8"
   },
   "devDependencies": {
+    "@swc/core": "^1.15.40",
+    "@swc/jest": "^0.2.39",
     "@types/express": "^4.17.21",
+    "@types/jest": "^29.5.14",
     "@types/node": "^20.14.10",
     "@types/pg": "^8.11.6",
+    "@types/supertest": "^7.2.0",
     "copyfiles": "^2.4.1",
+    "jest": "^29.7.0",
+    "jest-junit": "^17.0.0",
+    "supertest": "^7.2.2",
     "tsx": "^4.19.0",
     "typescript": "^5.5.4"
   }

@@ -27,7 +27,7 @@ for i in {1..30}; do
     docker compose ps
     echo ""
     echo "▶ Tail logs:   ./scripts/logs.sh [worker|app-server|postgres]"
-    echo "▶ Run e2e:     ./scripts/e2e/test-bitbucket-pr-status.sh"
+    echo "▶ Run e2e:     npm run test:e2e"
     exit 0
   fi
   sleep 1

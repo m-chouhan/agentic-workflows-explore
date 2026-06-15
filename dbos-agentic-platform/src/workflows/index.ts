@@ -3,9 +3,11 @@ import type { WorkflowModule } from "../platform/types";
 import { scanAndFixModule } from "./scan-and-fix";
 import { bitbucketPrStatusModule } from "./bitbucket-pr-status";
 import { bitbucketPrAutofixModule } from "./bitbucket-pr-autofix";
+import { platformSmokeModule } from "./platform-smoke";
 
 export const workflowModules: WorkflowModule[] = [
   scanAndFixModule,
   bitbucketPrStatusModule,
   bitbucketPrAutofixModule,
+  platformSmokeModule,
 ];

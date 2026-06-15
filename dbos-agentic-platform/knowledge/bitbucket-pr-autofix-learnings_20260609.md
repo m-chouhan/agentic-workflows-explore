@@ -109,7 +109,7 @@ Tier 2 — Live e2e (AUTOFIX_DRY=0, manual):
 
 Run Tier 2:
 ```bash
-AUTOFIX_DRY=0 POLL_TIMEOUT=900 bash scripts/e2e/test-bitbucket-pr-autofix.sh
+AUTOFIX_E2E=1 POLL_TIMEOUT=900 npm run test:e2e
 ```
 
 Monitor mid-run:

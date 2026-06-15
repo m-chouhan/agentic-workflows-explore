@@ -18,16 +18,15 @@ Run-and-test helpers for the DBOS agentic platform.
 
 ## End-to-end tests
 
-Black-box HTTP tests that drive a real workflow through the full stack
-(server → queue → worker → DB → poll endpoint).
+E2E tests are Jest suites co-located with their workflow (`src/workflows/<name>/<name>.e2e.test.ts`),
+not shell scripts. They drive a real workflow through the full stack (server → queue → worker →
+DB → poll endpoint) and assert only the durable path that unit/integration tiers can't — input
+validation and status mapping live in `*.int.test.ts`. See `knowledge/testing-strategy_20260608.md`.
 
-| Command | Workflow |
-|---|---|
-| `npm run e2e:bitbucket` | `bitbucketPrStatus` — enqueue, poll, validate result shape |
-| `npm run e2e:scan` | `scanAndFix` — pulls a real GitHub repo + runs Trivy (slower; needs `GOOGLE_GENERATIVE_AI_API_KEY`) |
-
-Each test exits non-zero on first failed assertion. Run them individually for now —
-chain in CI with `&&` if needed.
+```bash
+npm run stack:up      # start postgres + worker + app-server
+npm run test:e2e      # run all src/**/*.e2e.test.ts
+```
 
 ### Env overrides
 
@@ -35,19 +34,17 @@ chain in CI with `&&` if needed.
 |---|---|---|
 | `BASE_URL` | `http://localhost:3002` | Where the app-server is listening |
 | `POLL_INTERVAL` | `3` (s) | How often to poll for workflow status |
-| `POLL_TIMEOUT` | `120` (s) | How long to wait before giving up |
-| `TEST_REPO` | per-script | Override the repo a test uses |
+| `POLL_TIMEOUT` | `180` (s) | How long to wait before giving up |
+| `TEST_REPO` | per-test | Override the repo a test uses |
 
-Example:
 ```bash
-TEST_REPO=myworkspace/myrepo POLL_TIMEOUT=300 npm run e2e:bitbucket
+TEST_REPO=myworkspace/myrepo POLL_TIMEOUT=300 npm run test:e2e
 ```
 
 ## Adding a new e2e test
 
-1. Create `scripts/e2e/test-<workflow-name>.sh`
-2. Source `_lib.sh` for `require_server_up`, `wait_for_workflow`, `assert_jq`
-3. Add an npm alias in `package.json` under `scripts`
+1. Create `src/workflows/<name>/<name>.e2e.test.ts`
+2. Import `requireServerUp`, `postJson`, `pollUntilDone` from `../../test-support/e2e`
+3. Assert the durable path (enqueue → poll → SUCCESS + result invariants)
 
-See `test-bitbucket-pr-status.sh` as the reference shape (6 phases: validation × 2,
-not-found, enqueue, poll-until-done, result-shape).
+See `src/workflows/bitbucket-pr-status/bitbucket-pr-status.e2e.test.ts` as the reference shape.

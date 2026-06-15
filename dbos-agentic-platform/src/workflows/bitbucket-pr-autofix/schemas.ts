@@ -1,47 +1,21 @@
-// Plain TS types — this workflow is a deterministic action loop (no LLM output to validate).
-import type { BitbucketPipelineState } from "../../platform/bitbucket";
-import type { PrWithBuild } from "../bitbucket-pr-status/schemas";
+// Plain TS types — this workflow is a deterministic discover-and-retrigger pass.
 
-export type AutofixInput =
-  | { source: "discover"; repo: string }
-  | { source: "reuse"; statusWorkflowId: string };
-
-export type AttemptAction = "retrigger"; // future: "rebase" | "code-change"
-
-export type AttemptOutcome =
-  | "succeeded"   // pipeline completed SUCCESSFUL
-  | "failed"      // pipeline completed FAILED/STOPPED/ERROR
-  | "timeout"    // polled MAX_POLLS times without a terminal state
-  | "skipped";    // PR was no longer failing by the time we got to it
-
-export interface AutofixAttempt {
+export interface Retrigger {
   prId: number;
-  prUrl: string;
+  url: string;
   sourceBranch: string;
-  action: AttemptAction;
-  pipelineUuid: string | null;     // null if trigger failed
+  buildState: string;          // the failing state we observed
+  pipelineUuid: string | null; // set when the retrigger succeeds
   pipelineUrl: string | null;
-  initialState: BitbucketPipelineState | null;
-  finalState: BitbucketPipelineState | null;
-  pollCount: number;
-  outcome: AttemptOutcome;
-  errorMessage: string | null;
+  triggered: boolean;
+  error: string | null;
 }
 
 export interface AutofixResult {
   workflowId: string;
   repo: string;
-  source: "discover" | "reuse";
-  statusWorkflowId: string | null;
   totalFailing: number;
-  attempted: number;
-  succeeded: number;
-  failed: number;
-  timedOut: number;
-  skipped: number;
-  attempts: AutofixAttempt[];
-  status: "completed" | "failed";
+  triggered: number;           // how many retriggers succeeded
+  retriggers: Retrigger[];
+  status: "completed";
 }
-
-// Re-exported for convenience; the resolve step returns this shape.
-export type FailingPr = PrWithBuild;

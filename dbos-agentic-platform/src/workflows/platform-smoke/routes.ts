@@ -3,38 +3,41 @@ import { DBOSClient } from "@dbos-inc/dbos-sdk";
 import { z } from "zod";
 import { QUEUE_NAME, WORKFLOW_NAME } from "./constants";
 
-const PrAutofixRequestSchema = z.object({
+const SmokeRequestSchema = z.object({
   repo: z
     .string()
     .min(1)
     .regex(/^[^/]+\/[^/]+$/, "repo must be in workspace/slug format (e.g. atlassian/dt-proc)"),
 });
 
-export function buildPrAutofixRouter(client: DBOSClient): Router {
+export function buildPlatformSmokeRouter(client: DBOSClient): Router {
   const router = Router();
 
-  router.post("/pr-autofix", async (req: Request, res: Response) => {
-    const parsed = PrAutofixRequestSchema.safeParse(req.body);
+  router.post("/smoke", async (req: Request, res: Response) => {
+    const parsed = SmokeRequestSchema.safeParse(req.body);
     if (!parsed.success) {
       res.status(400).json({ error: "invalid_request", details: parsed.error.format() });
       return;
     }
-
     const { repo } = parsed.data;
-    const workflowId = `pr-autofix-${repo.replace("/", "-")}-${Date.now()}`;
+    const workflowId = `smoke-${repo.replace("/", "-")}-${Date.now()}`;
 
     try {
       await client.enqueue(
         { queueName: QUEUE_NAME, workflowName: WORKFLOW_NAME, workflowID: workflowId },
         repo,
       );
-      res.status(202).json({ workflowId, status: "ENQUEUED", pollUrl: `/workflow/pr-autofix/${workflowId}` });
+      res.status(202).json({
+        workflowId,
+        status: "ENQUEUED",
+        pollUrl: `/workflow/smoke/${workflowId}`,
+      });
     } catch (err) {
       res.status(500).json({ error: "enqueue_failed", message: (err as Error).message });
     }
   });
 
-  router.get("/pr-autofix/:id", async (req: Request, res: Response) => {
+  router.get("/smoke/:id", async (req: Request, res: Response) => {
     const { id } = req.params;
     try {
       const wf = await client.getWorkflow(id);

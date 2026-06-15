@@ -63,13 +63,8 @@ interface BbPrValue {
   links?: { html?: { href?: string } };
 }
 
-/** List OPEN pull requests for a repo ("workspace/slug"). */
-export async function listOpenPullRequests(repo: string): Promise<BitbucketPullRequest[]> {
-  parseRepo(repo);
-  const data = await bbGet<{ values?: BbPrValue[] }>(
-    `${repo}/pullrequests?state=OPEN&pagelen=50`,
-  );
-  return (data.values ?? []).map((pr) => ({
+function toPullRequest(pr: BbPrValue): BitbucketPullRequest {
+  return {
     id: pr.id,
     title: pr.title ?? "(no title)",
     author: pr.author?.display_name ?? "unknown",
@@ -79,7 +74,31 @@ export async function listOpenPullRequests(repo: string): Promise<BitbucketPullR
     createdOn: pr.created_on?.slice(0, 10) ?? "",
     updatedOn: pr.updated_on?.slice(0, 10) ?? "",
     url: pr.links?.html?.href ?? "",
-  }));
+  };
+}
+
+export type PrState = "OPEN" | "MERGED" | "DECLINED" | "SUPERSEDED" | "ALL";
+
+/**
+ * List pull requests for a repo ("workspace/slug").
+ * `state` "ALL" omits the filter so any state is returned; `limit` caps pagelen.
+ */
+export async function listPullRequests(
+  repo: string,
+  opts: { state?: PrState; limit?: number } = {},
+): Promise<BitbucketPullRequest[]> {
+  parseRepo(repo);
+  const { state = "OPEN", limit = 50 } = opts;
+  const stateQuery = state === "ALL" ? "" : `state=${state}&`;
+  const data = await bbGet<{ values?: BbPrValue[] }>(
+    `${repo}/pullrequests?${stateQuery}pagelen=${limit}`,
+  );
+  return (data.values ?? []).map(toPullRequest);
+}
+
+/** List OPEN pull requests for a repo ("workspace/slug"). */
+export async function listOpenPullRequests(repo: string): Promise<BitbucketPullRequest[]> {
+  return listPullRequests(repo, { state: "OPEN", limit: 50 });
 }
 
 interface BbStatusValue {
