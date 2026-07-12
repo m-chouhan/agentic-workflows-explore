@@ -19,6 +19,7 @@ async function bitbucketPrStatus(repo: string): Promise<PrStatusResult> {
   const prsWithBuild: PrWithBuild[] = [];
   for (const pr of prs) {
     const build = await DBOS.runStep(
+
       () => getBuildStatus(repo, pr.commitHash),
       { name: `build-${pr.id}`, retriesAllowed: true, maxAttempts: 2, intervalSeconds: 3, backoffRate: 1 },
     );

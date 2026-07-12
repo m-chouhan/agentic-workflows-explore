@@ -1,6 +1,12 @@
-# dbos-agentic-platform
+# AgentFlow
 
-DBOS-orchestrated agentic workflows combining deterministic steps with LLM-powered agents.
+> Controls the flow of multi-agent workflows.
+
+A platform to quickly build, deploy, and orchestrate agentic (and deterministic)
+workflows that automate mundane daily tasks. Each workflow is a self-contained,
+pluggable module — contributors add a folder, register it, and ship. DBOS provides
+durable execution (retries, crash recovery, queues) so contributors focus on the
+workflow logic, not the plumbing.
 
 **Stack:** Node.js · TypeScript · Express · DBOS SDK v4 · Vercel AI SDK · Postgres · Octokit
 
